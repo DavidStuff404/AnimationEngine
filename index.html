@@ -1,0 +1,3688 @@
+<html lang="en" style="height: 100%; overscroll-behavior: contain; -webkit-touch-callout: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;"><head><style>*{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}input,textarea,[contenteditable]{-webkit-user-select:text!important;user-select:text!important;}</style>
+<script>
+(function() {
+  if (typeof CustomEvent === 'function') return;
+  function CustomEvent(event, params) {
+    params = params || { bubbles: false, cancelable: false, detail: null };
+    var evt = document.createEvent('CustomEvent');
+    evt.initCustomEvent(event, params.bubbles, params.cancelable, params.detail);
+    return evt;
+  }
+  CustomEvent.prototype = window.Event && window.Event.prototype;
+  window.CustomEvent = CustomEvent;
+})();
+</script>
+
+<script>
+(function() {
+  // Function to set or update viewport meta tag
+  function ensureViewportMeta() {
+    var viewportMeta = document.querySelector('meta[name="viewport"]');
+    
+    if (!viewportMeta) {
+      // Create viewport meta tag if it doesn't exist
+      viewportMeta = document.createElement('meta');
+      viewportMeta.name = 'viewport';
+      document.head.insertBefore(viewportMeta, document.head.firstChild);
+    }
+    
+    // Set viewport to prevent iOS auto-zoom
+    // width=device-width: Use device width
+    // initial-scale=1.0: Initial zoom level
+    // maximum-scale=1.0: Prevent zooming beyond 1.0
+    // user-scalable=no: Disable user scaling (prevents pinch zoom and auto-zoom on input focus)
+    viewportMeta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+  }
+  
+  // Run immediately if DOM is already ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureViewportMeta);
+  } else {
+    ensureViewportMeta();
+  }
+  
+  // Also ensure it's set when head is ready (in case script runs before head)
+  if (!document.head) {
+    var observer = new MutationObserver(function(mutations) {
+      if (document.head) {
+        ensureViewportMeta();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.documentElement, { childList: true });
+  }
+})();
+</script>
+
+<script>
+(function() {
+  var originalAddEventListener = EventTarget.prototype.addEventListener;
+  var originalRemoveEventListener = EventTarget.prototype.removeEventListener;
+
+  // ── Tap vs Swipe detection ──
+  // Track pointerdown position; only synthesize click when displacement is small.
+  var ptrDownPos = null;
+  var TAP_THRESHOLD_SQ = 100; // 10px squared
+
+  originalAddEventListener.call(document, 'pointerdown', function(e) {
+    if (e.button !== 0) return;
+    ptrDownPos = { x: e.clientX, y: e.clientY };
+  }, { capture: true, passive: true });
+
+  function isTap(e) {
+    if (!ptrDownPos) return true; // no pointerdown recorded — be safe, treat as tap
+    var dx = e.clientX - ptrDownPos.x;
+    var dy = e.clientY - ptrDownPos.y;
+    return (dx * dx + dy * dy) <= TAP_THRESHOLD_SQ;
+  }
+
+  // ── click → pointerup conversion ──
+  var listenerMap = new WeakMap();
+
+  EventTarget.prototype.addEventListener = function(type, listener, options) {
+    if (type === 'click' && typeof listener === 'function') {
+      var elementMap = listenerMap.get(this);
+      if (!elementMap) {
+        elementMap = new Map();
+        listenerMap.set(this, elementMap);
+      }
+
+      var existingPointerListener = elementMap.get(listener);
+      if (existingPointerListener) {
+        return originalAddEventListener.call(this, 'pointerup', existingPointerListener, options);
+      }
+
+      var pointerupListener = function(e) {
+        if (e.button !== 0) return;
+        if (!isTap(e)) return;
+
+        var clickEvent = new MouseEvent('click', {
+          bubbles: e.bubbles, cancelable: e.cancelable, view: e.view,
+          detail: 1,
+          screenX: e.screenX, screenY: e.screenY,
+          clientX: e.clientX, clientY: e.clientY,
+          ctrlKey: e.ctrlKey, altKey: e.altKey,
+          shiftKey: e.shiftKey, metaKey: e.metaKey,
+          button: e.button, relatedTarget: e.relatedTarget
+        });
+        Object.defineProperty(clickEvent, 'target', { value: e.target, enumerable: true });
+        Object.defineProperty(clickEvent, 'currentTarget', { value: e.currentTarget, enumerable: true });
+
+        try { listener.call(this, clickEvent); } catch (err) {}
+      };
+
+      elementMap.set(listener, pointerupListener);
+      return originalAddEventListener.call(this, 'pointerup', pointerupListener, options);
+    }
+
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+
+  EventTarget.prototype.removeEventListener = function(type, listener, options) {
+    if (type === 'click' && typeof listener === 'function') {
+      var elementMap = listenerMap.get(this);
+      if (elementMap) {
+        var pointerupListener = elementMap.get(listener);
+        if (pointerupListener) {
+          elementMap.delete(listener);
+          return originalRemoveEventListener.call(this, 'pointerup', pointerupListener, options);
+        }
+      }
+    }
+    return originalRemoveEventListener.call(this, type, listener, options);
+  };
+
+  // ── Synthetic click for .onclick compatibility ──
+  // Only dispatch when the gesture is a tap (not a swipe).
+  var SEKAI_SYNTHETIC_KEY = '__sekai_sc';
+
+  originalAddEventListener.call(document, 'pointerup', function(e) {
+    if (e.button !== 0) return;
+    if (!isTap(e)) return;
+    var t = e.target;
+    if (!t || !t.dispatchEvent) return;
+
+    var evt = new MouseEvent('click', {
+      bubbles: true, cancelable: true, view: e.view,
+      detail: 1,
+      screenX: e.screenX, screenY: e.screenY,
+      clientX: e.clientX, clientY: e.clientY,
+      ctrlKey: e.ctrlKey, altKey: e.altKey,
+      shiftKey: e.shiftKey, metaKey: e.metaKey,
+      button: 0, relatedTarget: null
+    });
+    Object.defineProperty(evt, SEKAI_SYNTHETIC_KEY, { value: true });
+    t.dispatchEvent(evt);
+  }, false);
+
+  // Block browser-synthesized click events to prevent double-triggering.
+  originalAddEventListener.call(document, 'click', function(e) {
+    if (!e[SEKAI_SYNTHETIC_KEY]) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
+})();
+</script>
+
+<script>
+(function() {
+  // Track recent touch to block emulated mouse events
+  var lastTouchTime = 0;
+  var TOUCH_MOUSE_DELAY = 200; // ms to block mouse events after touch
+
+  // Global touch tracker - set flag when touch occurs
+  document.addEventListener('touchstart', function() {
+    lastTouchTime = Date.now();
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchend', function() {
+    lastTouchTime = Date.now();
+  }, { passive: true, capture: true });
+
+  // Block emulated mouse events that follow touch
+  // BUT allow them on focusable elements (inputs need mousedown for focus)
+  function blockEmulatedMouseHandler(e) {
+    if (Date.now() - lastTouchTime < TOUCH_MOUSE_DELAY) {
+      // Don't block on focusable elements - they need mousedown for focus
+      var target = e.target;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return; // Allow the event
+      }
+      e.stopPropagation();
+      // NOTE: Do NOT call preventDefault() here.
+      // CSS user-select:none already handles text selection prevention.
+      // On iOS WKWebView, mousedown.preventDefault() can intermittently
+      // suppress click event synthesis, breaking .onclick handlers.
+    }
+  }
+
+  // Capture phase blockers for emulated mouse events
+  document.addEventListener('mousedown', blockEmulatedMouseHandler, { capture: true });
+
+  // Patch addEventListener to force passive on touch events.
+  // Expose original globally so SCROLL_BLOCK_SCRIPT can register a
+  // non-passive touchmove handler to block iOS WKWebView parent scroll.
+  var originalAddEventListener = EventTarget.prototype.addEventListener;
+  window.__sekai_orig_ael = originalAddEventListener;
+
+  EventTarget.prototype.addEventListener = function(type, listener, options) {
+    // Convert touchstart/touchmove to passive
+    // Mouse event emulation is handled by our global blockers above
+    if (type === 'touchstart' || type === 'touchmove') {
+      var newOptions = Object.assign({}, options || {}, { passive: true });
+      return originalAddEventListener.call(this, type, listener, newOptions);
+    }
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+})();
+</script>
+
+<script>
+(function() {
+  // Track if dom_ready was already sent
+  var domReadySent = false;
+
+  function sendDomReady() {
+    if (domReadySent) return;
+    domReadySent = true;
+    window.parent.postMessage({ type: 'sekai_iframe_dom_ready' }, '*');
+  }
+
+  // Send dom_ready when DOMContentLoaded fires
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sendDomReady);
+  } else {
+    // DOM already loaded
+    sendDomReady();
+  }
+
+  // Helper to serialize message - handles objects that would become [object Object]
+  function serializeMessage(msg) {
+    if (msg === null || msg === undefined) return '';
+    if (typeof msg === 'string') return msg;
+    if (typeof msg === 'object') {
+      try {
+        return JSON.stringify(msg);
+      } catch (e) {
+        return String(msg);
+      }
+    }
+    return String(msg);
+  }
+
+  // Catch JS errors and send to parent
+  window.onerror = function(message, source, lineno, colno, error) {
+    window.parent.postMessage({
+      type: 'sekai_iframe_js_error',
+      message: serializeMessage(message),
+      source: source || '',
+      lineno: lineno || 0,
+      colno: colno || 0,
+      errorName: error ? error.name : '',
+      errorStack: error ? error.stack : ''
+    }, '*');
+    // Return false to allow default error handling
+    return false;
+  };
+
+  // Also catch unhandled promise rejections
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event.reason;
+    var isError = reason instanceof Error;
+    window.parent.postMessage({
+      type: 'sekai_iframe_js_error',
+      message: reason ? serializeMessage(reason) : 'Unhandled promise rejection',
+      source: 'unhandledrejection',
+      lineno: 0,
+      colno: 0,
+      errorName: isError ? reason.name : '',
+      errorStack: isError ? reason.stack : ''
+    }, '*');
+  });
+})();
+</script>
+
+<script>
+(function() {
+  // Collect all devicemotion listeners registered by game code
+  var deviceMotionListeners = [];
+
+  // Save original addEventListener
+  var originalAddEventListener = window.addEventListener;
+
+  // Intercept addEventListener to capture devicemotion listeners
+  window.addEventListener = function(type, listener, options) {
+    if (type === 'devicemotion' && typeof listener === 'function') {
+      deviceMotionListeners.push(listener);
+      // Also add to native in case permission is granted elsewhere
+      return originalAddEventListener.call(this, type, listener, options);
+    }
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+
+  // Also intercept removeEventListener
+  var originalRemoveEventListener = window.removeEventListener;
+  window.removeEventListener = function(type, listener, options) {
+    if (type === 'devicemotion' && typeof listener === 'function') {
+      var index = deviceMotionListeners.indexOf(listener);
+      if (index !== -1) {
+        deviceMotionListeners.splice(index, 1);
+      }
+    }
+    return originalRemoveEventListener.call(this, type, listener, options);
+  };
+
+  // Listen for forwarded motion data from parent
+  window.addEventListener('message', function(event) {
+    if (!event.data || event.data.type !== '__sekai_device_motion__') return;
+
+    var data = event.data;
+
+    // Create a synthetic event-like object
+    var syntheticEvent = {
+      accelerationIncludingGravity: data.accelerationIncludingGravity,
+      acceleration: data.acceleration,
+      rotationRate: data.rotationRate,
+      interval: data.interval || 16,
+      // Make it look like a real event
+      type: 'devicemotion',
+      timeStamp: data.timestamp || Date.now(),
+      target: window,
+      currentTarget: window,
+      preventDefault: function() {},
+      stopPropagation: function() {},
+      stopImmediatePropagation: function() {}
+    };
+
+    // Trigger all registered listeners
+    deviceMotionListeners.forEach(function(listener) {
+      try {
+        listener(syntheticEvent);
+      } catch (e) {
+        // Ignore listener errors
+      }
+    });
+  });
+})();
+</script>
+
+<script>
+(function() {
+  // Track all AudioContexts created in this iframe
+  var audioContexts = [];
+  var originalAudioContext = window.AudioContext || window.webkitAudioContext;
+
+  if (originalAudioContext) {
+    // Patch AudioContext constructor to track instances and enforce initial mute state.
+    // If isMuted is true when the context is created, suspend it immediately so that
+    // AudioNode sources cannot produce audio before the parent sends receive_audio_mute.
+    // This closes the race window between iframe load start and the first mute message.
+    var PatchedAudioContext = function() {
+      var ctx = new originalAudioContext();
+      audioContexts.push(ctx);
+      // Per-ctx diagnostic flags. Each AudioContext instance warns at most
+      // once for each of the two diagnostics below, so a rAF-driven
+      // resume() loop (observed in real games) does not spam vconsole,
+      // while new contexts still act as fresh sentinels.
+      var resumeBlockWarned = false;
+      var browserResumeWarned = false;
+      if (typeof ctx.resume === 'function') {
+        var originalCtxResume = ctx.resume.bind(ctx);
+        ctx.resume = function() {
+          if (isMuted) {
+            // Game code attempted to resume AudioContext during mute window.
+            // Blocked here prevents the audibility observer from reporting a
+            // false playing_started. Logged once per ctx to confirm the
+            // "game code calls resume()" leak path is real.
+            if (!resumeBlockWarned) {
+              resumeBlockWarned = true;
+              try {
+                console.warn(
+                  '[sekai-iframe-audio] AudioContext.resume() blocked while muted (once per ctx)'
+                );
+              } catch (e) {}
+            }
+            return Promise.resolve();
+          }
+          return originalCtxResume();
+        };
+      }
+      if (isMuted) {
+        ctx.suspend().catch(function() {});
+      }
+      // Feed perf audibility observer: re-evaluate whenever the context
+      // transitions between suspended/running/closed. ctx.suspend()/resume()
+      // resolve asynchronously, so the statechange event is the only reliable
+      // signal that the context has actually moved.
+      try {
+        ctx.addEventListener('statechange', function() {
+          // Sentinel: resume() is blocked above while muted, so if the ctx
+          // still enters 'running' during mute, the only remaining cause is
+          // browser-initiated state recovery (e.g. iOS audio session
+          // interruption ending). If this log ever appears in practice, the
+          // resume() block alone is not enough — we must also guard
+          // notifyAudibilityChange() to suppress audible=true while muted.
+          // Logged once per ctx to avoid repeated warnings on oscillating
+          // state transitions.
+          if (ctx.state === 'running' && isMuted && !browserResumeWarned) {
+            browserResumeWarned = true;
+            try {
+              console.warn(
+                '[sekai-iframe-audio] AudioContext entered running while muted (browser-initiated, once per ctx)'
+              );
+            } catch (e) {}
+          }
+          scheduleAudibilityCheck();
+        });
+      } catch (e) {
+        // Ignore listener attach failures on non-conforming contexts
+      }
+      return ctx;
+    };
+    PatchedAudioContext.prototype = originalAudioContext.prototype;
+    window.AudioContext = PatchedAudioContext;
+    if (window.webkitAudioContext) {
+      window.webkitAudioContext = PatchedAudioContext;
+    }
+  }
+
+  // Track all Audio objects (including those created via new Audio())
+  var audioElements = [];
+  var originalAudio = window.Audio;
+  
+  function rememberMutedState(el) {
+    if (!el) return;
+    try {
+      if (!mutedElements.has(el)) {
+        mutedElements.set(el, !!el.muted);
+      }
+    } catch (e) {
+      // Ignore muted state snapshot failures
+    }
+  }
+
+  if (originalAudio) {
+    window.Audio = function(src) {
+      var audio = new originalAudio(src);
+      audioElements.push(audio);
+      if (isMuted) {
+        rememberMutedState(audio);
+        try { audio.muted = true; } catch (e) {}
+      }
+      return audio;
+    };
+    // Preserve prototype chain
+    window.Audio.prototype = originalAudio.prototype;
+  }
+
+  // Track video elements created via createElement
+  var videoElements = [];
+  var originalCreateElement = document.createElement;
+
+  document.createElement = function(tagName) {
+    var element = originalCreateElement.call(document, tagName);
+
+    // Track audio and video elements
+    if (typeof tagName === 'string') {
+      var tag = tagName.toLowerCase();
+      if (tag === 'audio') {
+        audioElements.push(element);
+        if (isMuted) {
+          rememberMutedState(element);
+          try { element.muted = true; } catch (e) {}
+        }
+      } else if (tag === 'video') {
+        videoElements.push(element);
+        if (isMuted) {
+          rememberMutedState(element);
+          try { element.muted = true; } catch (e) {}
+        }
+      }
+    }
+
+    return element;
+  };
+
+  // Track elements that are INTENDED to be playing (based on .play()/.pause() calls).
+  // This is more reliable than checking .paused at mute time, because iOS pauses
+  // audio elements when the app goes to background BEFORE our JS visibility handler
+  // runs — by the time muteAllAudio() is called, all elements are already paused
+  // by the OS and .paused === true for all of them.
+  var intendedPlaying = new Set();
+
+  if (window.HTMLMediaElement) {
+    var originalHTMLPlay = HTMLMediaElement.prototype.play;
+    var originalHTMLPause = HTMLMediaElement.prototype.pause;
+    var internalPause = false;
+
+    HTMLMediaElement.prototype.play = function() {
+      intendedPlaying.add(this);
+      if (isMuted) {
+        rememberMutedState(this);
+        try { this.muted = true; } catch (e) {}
+        try {
+          if (!this.paused) {
+            internalPause = true;
+            originalHTMLPause.call(this);
+          }
+        } catch (e) {
+          // Ignore pause failures while muted
+        } finally {
+          internalPause = false;
+        }
+        return Promise.resolve();
+      }
+      return originalHTMLPlay.apply(this, arguments);
+    };
+
+    HTMLMediaElement.prototype.pause = function() {
+      if (!internalPause) {
+        intendedPlaying.delete(this);
+      }
+      return originalHTMLPause.apply(this, arguments);
+    };
+  }
+
+  // Track elements queued for playback resume — retried on each user touchstart
+  // until all elements are playing again. More reliable than { once: true } because
+  // it survives cases where the first touch fires before unmuteAllAudio() processes
+  // the message (postMessage is async; user may touch the moment they switch back).
+  var pendingResume = [];
+
+  // Track muted state to restore correctly
+  var mutedElements = new WeakMap();
+  var isMuted = false;
+
+  function collectTrackedMediaElements() {
+    var elements = [];
+    var seen = new Set();
+
+    function pushElement(el) {
+      if (!el || seen.has(el)) return;
+      seen.add(el);
+      elements.push(el);
+    }
+
+    document.querySelectorAll('audio, video').forEach(pushElement);
+    audioElements.forEach(pushElement);
+    videoElements.forEach(pushElement);
+
+    return elements;
+  }
+
+  function pauseElementForMute(el) {
+    if (!el) return;
+
+    if (!el.paused && !el.ended) {
+      intendedPlaying.add(el);
+    }
+
+    try {
+      internalPause = true;
+      el.pause();
+    } finally {
+      internalPause = false;
+    }
+  }
+
+  function lockElementAudio(el) {
+    if (!el) return;
+    rememberMutedState(el);
+    pauseElementForMute(el);
+    try {
+      el.muted = true;
+    } catch (e) {
+      // Ignore mute failures for stale or invalid elements
+    }
+  }
+
+  function muteAllAudio() {
+    if (isMuted) return;
+    isMuted = true;
+    pendingResume = []; // Clear queued resumes — new mute cycle resets state
+
+    // Suspend all AudioContexts
+    audioContexts.forEach(function(ctx) {
+      if (ctx && ctx.state === 'running') {
+        ctx.suspend().catch(function() {});
+      }
+    });
+
+    // Pause first, then force mute so background playback cannot leak audio.
+    // The audibility observer below will automatically emit
+    // sekai_iframe_audio_playing_stopped once the pause/mute propagates, so
+    // we no longer post a separate sekai_iframe_audio_muted confirmation.
+    collectTrackedMediaElements().forEach(function(el) {
+      try {
+        lockElementAudio(el);
+      } catch (e) {
+        // Element might be stale or invalid
+      }
+    });
+  }
+
+  function resumeAllContexts() {
+    audioContexts.forEach(function(ctx) {
+      // Call resume() on any non-closed context, including 'running'.
+      // Reason: muteAllAudio() calls ctx.suspend(), which is async. If
+      // unmuteAllAudio() (or a touchstart retry) runs before suspend() resolves,
+      // ctx.state is still 'running' — the old suspended/interrupted-only guard
+      // would skip it, then suspend() resolves and the context stays permanently
+      // suspended. By calling resume() on 'running' contexts too, we queue a
+      // resume after the pending suspend, so both operations execute in order
+      // (suspend → resume) and the context ends up running as intended.
+      // resume() on an already-running context is a no-op per the Web Audio spec.
+      if (ctx && ctx.state !== 'closed') {
+        ctx.resume().catch(function() {});
+      }
+    });
+  }
+
+  function unmuteAllAudio() {
+    if (!isMuted) return;
+    isMuted = false;
+
+    // Resume all AudioContexts immediately (handles 'suspended' and 'interrupted')
+    resumeAllContexts();
+
+    // Restore tracked media elements to their original muted state.
+    collectTrackedMediaElements().forEach(function(el) {
+      var wasMuted = mutedElements.get(el);
+      if (wasMuted !== undefined) {
+        el.muted = wasMuted;
+      } else {
+        el.muted = false;
+      }
+    });
+    mutedElements = new WeakMap();
+
+    // Queue intended elements for playback resume.
+    // iOS pauses audio/video elements on app-switch before our JS handler runs,
+    // so simply unmuting is not enough — we must call .play() to restore.
+    // We populate pendingResume here; the persistent touchstart listener below
+    // retries on every user touch until all elements are playing again.
+    pendingResume = [];
+    intendedPlaying.forEach(function(el) {
+      if (!el || el.ended) return;
+      pendingResume.push(el);
+    });
+    // Also attempt immediately — succeeds on iOS versions / audio session states
+    // that allow .play() without a fresh user gesture.
+    pendingResume.forEach(function(el) {
+      try { if (el.paused) el.play().catch(function() {}); } catch(e) {}
+    });
+  }
+
+  // Persistent touchstart listener — fires on every user touch while unmuted.
+  // Retries AudioContext resume and HTML5 element .play() until all succeed.
+  // Registered once at script init using capture phase so game code stopPropagation
+  // cannot prevent it from running.
+  //
+  // Why persistent instead of { once: true }:
+  // - postMessage delivery is async; the user may touch before unmuteAllAudio()
+  //   processes the receive_audio_unmute message, consuming a { once: true } slot
+  // - iOS may reject .play() on the first attempt but allow it on subsequent ones
+  document.addEventListener('touchstart', function() {
+    if (isMuted) return;
+    // Retry AudioContexts on every touch (handles 'interrupted' / 'suspended')
+    resumeAllContexts();
+    // Retry HTML5 elements still waiting to resume
+    if (pendingResume.length === 0) return;
+    var toTry = pendingResume;
+    pendingResume = [];
+    toTry.forEach(function(el) {
+      try {
+        if (!el.paused) return; // Already playing — no action needed
+        el.play().catch(function() {
+          pendingResume.push(el); // Failed — retry on next touch
+        });
+      } catch(e) {
+        pendingResume.push(el);
+      }
+    });
+  }, { passive: true, capture: true });
+
+  function collectMediaFromNode(node) {
+    if (!node || node.nodeType !== 1) return [];
+    var elements = [];
+    if (node.tagName === 'AUDIO' || node.tagName === 'VIDEO') {
+      elements.push(node);
+    }
+    if (typeof node.querySelectorAll === 'function') {
+      node.querySelectorAll('audio, video').forEach(function(el) {
+        elements.push(el);
+      });
+    }
+    return elements;
+  }
+
+  document.addEventListener('play', function(event) {
+    if (!isMuted) return;
+    var target = event.target;
+    if (!target || typeof target.pause !== 'function') return;
+    lockElementAudio(target);
+  }, true);
+
+  document.addEventListener('playing', function(event) {
+    if (!isMuted) return;
+    var target = event.target;
+    if (!target || typeof target.pause !== 'function') return;
+    lockElementAudio(target);
+  }, true);
+
+  var mutationObserverTarget = document.documentElement || document;
+  if (typeof MutationObserver !== 'undefined' && mutationObserverTarget) {
+    var mediaMutationObserver = new MutationObserver(function(mutations) {
+      if (!isMuted) return;
+      mutations.forEach(function(mutation) {
+        mutation.addedNodes.forEach(function(node) {
+          collectMediaFromNode(node).forEach(function(el) {
+            lockElementAudio(el);
+          });
+        });
+      });
+    });
+    mediaMutationObserver.observe(mutationObserverTarget, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  // ========================================================================
+  // Audibility observer — parent-facing signal for feed perf dashboard.
+  //
+  // Fact measured: "is this iframe currently producing audible output?"
+  //   - Based on real <audio>/<video> element state and AudioContext state
+  //   - Not based on parent mute/unmute commands (those only state intent)
+  //
+  // Why this matters:
+  //   - "should have played but didn't" — card visible, no start event
+  //   - "played after it shouldn't" — audio duration > card visible duration
+  // Both failure modes are invisible from the parent side alone.
+  //
+  // Multi-cycle per card is supported naturally: every mute/unmute/tab
+  // switch/user action that flips real audibility emits a new event pair.
+  // ========================================================================
+  var lastAudibleState = false;
+  var audibilityCheckScheduled = false;
+
+  function isElementAudible(el) {
+    if (!el) return false;
+    try {
+      if (el.paused || el.ended || el.muted) return false;
+      var vol = typeof el.volume === 'number' ? el.volume : 1;
+      if (vol <= 0) return false;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function computeAudible() {
+    var elements = collectTrackedMediaElements();
+    for (var i = 0; i < elements.length; i++) {
+      if (isElementAudible(elements[i])) return true;
+    }
+    for (var j = 0; j < audioContexts.length; j++) {
+      var ctx = audioContexts[j];
+      if (ctx && ctx.state === 'running') return true;
+    }
+    return false;
+  }
+
+  function notifyAudibilityChange() {
+    var audible = computeAudible();
+    if (audible === lastAudibleState) return;
+    lastAudibleState = audible;
+    // Feed perf 采样门禁：父层已在注入时决定这轮是否上报。
+    // 状态位 lastAudibleState 仍然更新，保证后续 started/stopped 仍能配对。
+    if (window.__SEKAI_FEED_PERF_SAMPLED__ === false) return;
+    try {
+      window.parent.postMessage({
+        type: audible
+          ? 'sekai_iframe_audio_playing_started'
+          : 'sekai_iframe_audio_playing_stopped',
+        timestamp: Date.now(),
+      }, '*');
+    } catch (e) {
+      // Ignore postMessage failures (parent window may be gone)
+    }
+  }
+
+  // scheduleAudibilityCheck is also referenced from PatchedAudioContext's
+  // statechange listener above — hoisted function declaration resolves OK.
+  function scheduleAudibilityCheck() {
+    if (audibilityCheckScheduled) return;
+    audibilityCheckScheduled = true;
+    // Microtask: batch multiple synchronous state changes (e.g. mute pauses
+    // 3 elements + suspends 1 context in sequence) into a single notification.
+    Promise.resolve().then(function() {
+      audibilityCheckScheduled = false;
+      notifyAudibilityChange();
+    });
+  }
+
+  // Capture phase so game code calling stopPropagation cannot hide these.
+  // Only react to events from <audio> / <video> elements.
+  ['play', 'playing', 'pause', 'ended', 'volumechange', 'emptied'].forEach(function(evName) {
+    document.addEventListener(evName, function(event) {
+      var target = event.target;
+      var tag = target && target.tagName;
+      if (tag !== 'AUDIO' && tag !== 'VIDEO') return;
+      scheduleAudibilityCheck();
+    }, true);
+  });
+
+  window.addEventListener('message', function(event) {
+    if (!event.data) return;
+
+    if (event.data.type === 'receive_audio_mute' ||
+        (event.data.origin === 'sekai_gaming_iframe_api' && event.data.type === 'receive_audio_mute')) {
+      muteAllAudio();
+    }
+
+    if (event.data.type === 'receive_audio_unmute' ||
+        (event.data.origin === 'sekai_gaming_iframe_api' && event.data.type === 'receive_audio_unmute')) {
+      unmuteAllAudio();
+    }
+  });
+})();
+</script>
+
+<script>
+(function() {
+  var ORIGIN = 'sekai_gaming_iframe_api';
+
+  // --- Shared helper: find <audio> elements by URL and set volume ---
+  function applyVolumeByUrl(url, volume) {
+    if (!url) return;
+    var vol = Math.max(0, Math.min(1, Number(volume)));
+    if (isNaN(vol)) return;
+    document.querySelectorAll('audio').forEach(function(el) {
+      var src = el.src || el.currentSrc || '';
+      if (src === url) {
+        el.volume = vol;
+      }
+    });
+  }
+
+  // --- Initial volume on game load ---
+  // Reads window.sekaiEditable (written into the HTML by the backend) and applies
+  // any volume values to matching <audio> elements. The LLM-generated game code
+  // does not read the volume field, so we apply it here.
+  function applyInitialVolumes() {
+    var meta = window.sekaiEditable;
+    if (!meta) return;
+    var items = (meta.music || []).concat(meta.sfx || []);
+    items.forEach(function(item) {
+      if (item.value && item.volume !== undefined && item.volume !== null) {
+        applyVolumeByUrl(item.value, item.volume);
+      }
+    });
+  }
+
+  // Run as soon as DOM is parsed, then retry after short delays to catch
+  // audio elements created during game initialization (e.g. after DOMContentLoaded).
+  if (document.readyState !== 'loading') {
+    applyInitialVolumes();
+  } else {
+    document.addEventListener('DOMContentLoaded', applyInitialVolumes);
+  }
+  setTimeout(applyInitialVolumes, 500);
+  setTimeout(applyInitialVolumes, 1500);
+
+  // --- Real-time volume control (postMessage from editor) ---
+  window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data || data.origin !== ORIGIN) return;
+
+    var payload = data.data;
+    if (!payload) return;
+
+    if (data.type === 'set_audio_volume') {
+      // Real-time drag path: LLM code never sees this type
+      applyVolumeByUrl(payload.url, payload.volume);
+    } else if (data.type === 'apply_change' && payload.volume !== undefined && payload.volume !== null) {
+      // Commit path (on release): runs before LLM handler via capture phase
+      applyVolumeByUrl(payload.value, payload.volume);
+    }
+  }, true); // capture phase — runs before LLM game code
+})();
+</script>
+
+<script>
+(function() {
+  var ORIGIN = 'sekai_gaming_iframe_api';
+
+  // Handle the font data URL response from the parent window.
+  // The parent fetched the font bytes and encoded them as a base64 data URL
+  // so we can inject @font-face without any cross-origin network request.
+  window.addEventListener('message', function(event) {
+    var msg = event.data;
+    if (!msg || msg.type !== 'sekai_font_data_response') return;
+
+    var prevStyle = document.getElementById('sekai-font-' + msg.itemId);
+    if (prevStyle) prevStyle.parentNode.removeChild(prevStyle);
+
+    var style = document.createElement('style');
+    style.id = 'sekai-font-' + msg.itemId;
+    // font-weight range covers all weights so we don't need per-weight rules.
+    style.textContent = "@font-face { font-family: '" + msg.family + "'; src: url('" + msg.dataUrl + "'); font-weight: 100 900; }";
+    document.head.appendChild(style);
+
+    if (msg.cssVar) {
+      document.documentElement.style.setProperty(msg.cssVar, "'" + msg.family + "'");
+    }
+  });
+
+  window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data || data.origin !== ORIGIN) return;
+    if (data.type !== 'apply_change') return;
+
+    var payload = data.data;
+    if (!payload || !payload.value) return;
+
+    var meta = window.sekaiEditable;
+    if (!meta) return;
+
+    // --- Font handling ---
+    // No type guard — LLM-generated sekaiEditable often omits the type field.
+    if (meta.fonts) {
+      for (var i = 0; i < meta.fonts.length; i++) {
+        var font = meta.fonts[i];
+        if (font.id === payload.id) {
+          // Update sekaiEditable synchronously so get_current_html saves the new value.
+          font.value = payload.value;
+          if (payload.name) font.name = payload.name;
+          // Ask the parent to fetch and return the font as a data URL.
+          // Avoids WKWebView blob-iframe CORS restrictions on external font fetches.
+          window.parent.postMessage({
+            type: 'sekai_request_font_data',
+            itemId: font.id,
+            fontUrl: payload.value,
+            family: font.fallback || ('sekai-swap-' + font.id),
+            cssVar: font.cssVar || null,
+          }, '*');
+          return;
+        }
+      }
+    }
+
+    // --- Model handling ---
+    if (meta.models) {
+      for (var j = 0; j < meta.models.length; j++) {
+        var model = meta.models[j];
+        if (model.id === payload.id) {
+          // Update sekaiEditable so get_current_html saves the new value.
+          model.value = payload.value;
+          if (payload.name) model.name = payload.name;
+          return;
+        }
+      }
+    }
+  }, true); // capture phase — runs before LLM apply_change handler
+})();
+</script>
+
+<script>
+(function() {
+  // Set styles to contain scroll and prevent propagation to parent
+  // CRITICAL: touch-action:none is the PRIMARY scroll blocker - it's handled by the compositor
+  // without waiting for JS, preventing WebView freezes during rapid swipes
+  var style = document.createElement('style');
+  style.textContent = 'html,body{overscroll-behavior:contain!important;height:100%!important;-webkit-user-select:none!important;user-select:none!important;touch-action:none!important;}';
+  document.head.appendChild(style);
+
+  var scrollableTarget = null;
+  var touchStartY = 0;
+
+  function findScrollableAncestor(el) {
+    while (el && el !== document.body && el !== document.documentElement) {
+      var cs = window.getComputedStyle(el);
+      if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) {
+      scrollableTarget = null;
+      return;
+    }
+
+    touchStartY = e.touches[0].clientY;
+    scrollableTarget = findScrollableAncestor(e.target);
+
+    if (scrollableTarget) {
+      scrollableTarget.style.touchAction = 'pan-y';
+    }
+  }, { passive: true, capture: true });
+
+  var resetScrollState = function() {
+    if (scrollableTarget) {
+      scrollableTarget.style.touchAction = '';
+      scrollableTarget = null;
+    }
+  };
+
+  document.addEventListener('touchend', resetScrollState, { passive: true, capture: true });
+  document.addEventListener('touchcancel', resetScrollState, { passive: true, capture: true });
+
+  // iOS WKWebView fix: CSS touch-action:none inside an iframe does NOT
+  // prevent the parent WebView scroll container from scrolling. A single
+  // non-passive touchmove handler with preventDefault() is the only
+  // reliable cross-iframe scroll blocker on iOS.
+  // Uses the original addEventListener saved by TOUCH_LISTENER_PATCH_SCRIPT
+  // to bypass the passive-force patch applied to game code listeners.
+  var origAel = window.__sekai_orig_ael;
+  if (origAel) {
+    origAel.call(document, 'touchmove', function(e) {
+      if (e.touches.length !== 1 || !e.cancelable) return;
+
+      if (!scrollableTarget) {
+        e.preventDefault();
+        return;
+      }
+
+      var st = scrollableTarget;
+      var atTop = st.scrollTop <= 0;
+      var atBottom = st.scrollTop >= st.scrollHeight - st.clientHeight - 1;
+      var currentY = e.touches[0].clientY;
+
+      if ((atTop && atBottom) ||
+          (atTop && currentY > touchStartY) ||
+          (atBottom && currentY < touchStartY)) {
+        e.preventDefault();
+      }
+    }, { passive: false, capture: true });
+  }
+
+  // Notify parent when input is focused (for keyboard handling)
+  document.addEventListener('focusin', function(e) {
+    var t = e.target;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) {
+      window.parent.postMessage({ type: 'iframe-focusin' }, '*');
+    }
+  }, true);
+
+  document.addEventListener('focusout', function(e) {
+    var t = e.target;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) {
+      // Check if focus is moving to another focusable element (input switching)
+      // If so, don't send focusout - the keyboard stays open
+      var related = e.relatedTarget;
+      if (related && (related.tagName === 'INPUT' || related.tagName === 'TEXTAREA' || related.isContentEditable)) {
+        return; // Skip focusout when switching between inputs
+      }
+      window.parent.postMessage({ type: 'iframe-focusout' }, '*');
+    }
+  }, true);
+})();
+</script><style>html,body{overscroll-behavior:contain!important;height:100%!important;-webkit-user-select:none!important;user-select:none!important;touch-action:none!important;}</style>
+
+<script>
+(function() {
+  var viewportStyle = document.createElement('style');
+  viewportStyle.id = 'sekai-viewport-style';
+  document.head.appendChild(viewportStyle);
+
+  var currentHeight = null;
+
+  function applyHeight(height) {
+    if (height === currentHeight) return;
+    currentHeight = height;
+
+    var transition = 'transition: height 0.25s cubic-bezier(0.32, 0, 0.68, 1) !important;';
+
+    if (typeof height === 'number' && height > 0) {
+      viewportStyle.textContent =
+        ':root { --sekai-viewport-height: ' + height + 'px; }' +
+        'html { height: ' + height + 'px !important; overflow: hidden !important; ' + transition + ' }' +
+        'body { height: ' + height + 'px !important; overflow: hidden !important; ' + transition + ' }';
+    } else {
+      viewportStyle.textContent =
+        ':root { --sekai-viewport-height: 100%; }' +
+        'html { height: 100% !important; overflow: hidden !important; }' +
+        'body { height: 100% !important; overflow: hidden !important; }';
+    }
+  }
+
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'viewport_height_change') {
+      var height = typeof event.data.height === 'number' ? event.data.height : null;
+      applyHeight(height);
+    }
+  });
+
+  // Notify parent that viewport handler is ready (handshake)
+  window.parent.postMessage({ type: 'viewport_ready' }, '*');
+})();
+</script><style id="sekai-viewport-style"></style>
+
+<script>
+(function() {
+  var touchStartY = null;
+  var lastSentTime = 0;
+  var SWIPE_THRESHOLD = 100;
+  var DEBOUNCE_MS = 500; // Prevent multiple events from single swipe
+
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) {
+      touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchend', function(e) {
+    if (touchStartY !== null && e.changedTouches.length === 1) {
+      var now = Date.now();
+      var deltaY = touchStartY - e.changedTouches[0].clientY;
+      var timeSinceLast = now - lastSentTime;
+      // Only send if above threshold AND not within debounce window
+      if (deltaY >= SWIPE_THRESHOLD && timeSinceLast >= DEBOUNCE_MS) {
+        lastSentTime = now;
+        window.parent.postMessage({
+          type: 'sekai_iframe_swipe_up',
+          deltaY: deltaY,
+          timestamp: now
+        }, '*');
+      }
+    }
+    touchStartY = null;
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchcancel', function() {
+    touchStartY = null;
+  }, { passive: true, capture: true });
+})();
+</script>
+
+<script>
+(function() {
+
+  function urlToBase64(url) {
+    return fetch(url)
+      .then(function(res) { return res.blob(); })
+      .then(function(blob) {
+        return new Promise(function(resolve) {
+          var reader = new FileReader();
+          reader.onload = function() { resolve(reader.result); };
+          reader.readAsDataURL(blob);
+        });
+      })
+      .catch(function() { return null; });
+  }
+
+  function inlineImages(doc) {
+    var imgs = Array.prototype.slice.call(doc.querySelectorAll('img[src]'));
+    return Promise.all(imgs.map(function(img) {
+      return urlToBase64(img.src).then(function(base64) {
+        if (base64) img.setAttribute('src', base64);
+      });
+    }));
+  }
+
+  function inlineCssUrls(css, baseUrl) {
+    var urlPattern = /url(s*([^)]+)s*)/g;
+    var matches = [];
+    var match;
+    while ((match = urlPattern.exec(css)) !== null) {
+      var url = match[1].trim().replace(/^['"]|['"]$/g, '');
+      if (!url.startsWith('data:') && !url.startsWith('#')) {
+        matches.push({ full: match[0], url: url });
+      }
+    }
+    if (matches.length === 0) return Promise.resolve(css);
+
+    return Promise.all(matches.map(function(m) {
+      var resolved;
+      try { resolved = new URL(m.url, baseUrl).href; } catch(e) { return Promise.resolve(null); }
+      return urlToBase64(resolved).then(function(base64) {
+        return base64 ? { original: m.full, replacement: 'url(' + base64 + ')' } : null;
+      });
+    })).then(function(results) {
+      results.forEach(function(r) {
+        if (r) css = css.split(r.original).join(r.replacement);
+      });
+      return css;
+    });
+  }
+
+  function inlineStylesheets(doc) {
+    var links = Array.prototype.slice.call(doc.querySelectorAll('link[rel="stylesheet"]'));
+    return Promise.all(links.map(function(link) {
+      var href = link.href;
+      return fetch(href)
+        .then(function(res) { return res.text(); })
+        .then(function(css) { return inlineCssUrls(css, href); })
+        .then(function(css) {
+          var style = doc.createElement('style');
+          style.textContent = css;
+          link.parentNode.replaceChild(style, link);
+        })
+        .catch(function() {});
+    }));
+  }
+
+  function captureFullSnapshot() {
+    var cloned = document.documentElement.cloneNode(true);
+    var tempDoc = document.implementation.createHTMLDocument('');
+    tempDoc.documentElement.replaceWith(cloned);
+
+    // Remove all script tags so the snapshot is a frozen DOM state —
+    // not a re-playable game. Without this, opening the file re-runs
+    // all scripts and resets the game, destroying the captured state.
+    var scripts = Array.prototype.slice.call(tempDoc.querySelectorAll('script'));
+    scripts.forEach(function(s) { s.parentNode.removeChild(s); });
+
+    return Promise.all([
+      inlineImages(tempDoc),
+      inlineStylesheets(tempDoc),
+    ]).then(function() {
+      return '<!DOCTYPE html>' + tempDoc.documentElement.outerHTML;
+    });
+  }
+
+  var _runtimeErrors = [];
+
+  window.addEventListener('error', function(e) {
+    _runtimeErrors.push({
+      type: 'error',
+      message: e.message,
+      source: e.filename,
+      line: e.lineno,
+      col: e.colno,
+      stack: e.error ? e.error.stack : null,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(e) {
+    _runtimeErrors.push({
+      type: 'unhandledrejection',
+      message: e.reason instanceof Error ? e.reason.message : String(e.reason),
+      stack: e.reason instanceof Error ? e.reason.stack : null,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // 监听来自父页面的指令
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'TAKE_SNAPSHOT') return;
+
+    captureFullSnapshot().then(function(html) {
+      window.parent.postMessage({
+        type: 'SNAPSHOT_RESULT',
+        payload: {
+          html: html,
+          errors: _runtimeErrors.slice(),
+        }
+      }, '*');
+    });
+  });
+
+})();
+</script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>David's Animation Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script type="module">
+        import { snapdom } from 'https://cdn.jsdelivr.net/npm/@zumer/snapdom@2.0.2/+esm';
+        window.snapdom = snapdom;
+    </script>
+    <style>
+        :root {
+            --primary: #9333ea;
+            --primary-light: #c084fc;
+            --accent: #d8b4fe;
+            --bg-color: #000000;
+            --surface-color: #111111;
+            --surface-light: #1e1e1e;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        /* 16:9 Stage Area */
+        #stage-wrapper {
+            width: 100%;
+            flex-shrink: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            aspect-ratio: 16 / 9;
+            overflow: hidden;
+        }
+
+        #stage {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            overflow: hidden;
+            background-color: #0a0a0a;
+        }
+
+        .stage-entity {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            will-change: transform, left, top;
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+        }
+
+        .stage-entity img {
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            pointer-events: none;
+        }
+
+        .stage-entity.type-text {
+            background: var(--surface-light);
+            color: var(--text-main);
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 15px rgba(147, 51, 234, 0.3);
+            font-weight: 600;
+            white-space: pre-wrap;
+            text-align: center;
+            min-width: 80px;
+            max-width: 250px;
+            word-wrap: break-word;
+        }
+
+        /* Selection Outline & Interactive Handles */
+        .stage-entity.selected::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border: 2px solid var(--primary);
+            border-radius: 4px;
+            pointer-events: none;
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .handle {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: var(--primary);
+            border: 2px solid white;
+            border-radius: 50%;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            touch-action: none;
+        }
+        .stage-entity.selected .handle { display: block; }
+
+        .handle-resize { bottom: -16px; right: -16px; cursor: nwse-resize; }
+        .handle-rotate { top: -40px; left: 50%; transform: translateX(-50%); cursor: grab; }
+        .handle-rotate::after {
+            content: '';
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            width: 2px;
+            height: 16px;
+            background: var(--primary);
+            transform: translateX(-50%);
+        }
+
+        /* UI Areas */
+        #timeline-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--surface-color);
+            border-top: 1px solid #2e1065;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .scrubber-container {
+            position: relative;
+            height: 48px;
+            display: flex;
+            align-items: center;
+        }
+
+        #scrubber-track {
+            position: relative;
+            width: 100%;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        .keyframe-marker {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #a855f7;
+            border-radius: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 4;
+            border: 2px solid #000;
+        }
+
+        .tool-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 500;
+            padding: 12px 8px;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+        .tool-btn:active {
+            background: var(--surface-light);
+            transform: scale(0.95);
+        }
+        .tool-btn.active { color: var(--primary); }
+
+        /* Modals */
+        .modal-overlay {
+            visibility: hidden;
+            opacity: 0;
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 50;
+            display: flex;
+            align-items: flex-end;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .modal-overlay.visible {
+            visibility: visible;
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            background: var(--surface-color);
+            border: 1px solid #333;
+            width: 100%;
+            height: 70%;
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1);
+        }
+        .modal-overlay.visible .modal-content { transform: translateY(0); }
+
+        .asset-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
+            padding: 16px;
+            overflow-y: auto;
+            touch-action: pan-y !important;
+            background: var(--surface-color);
+        }
+        
+        .asset-grid * {
+            touch-action: pan-y !important;
+        }
+
+        .asset-item {
+            aspect-ratio: 1;
+            background: var(--surface-light);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #2e1065;
+        }
+        .asset-item:active { opacity: 0.8; transform: scale(0.95); }
+        .asset-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .asset-item.contain img { object-fit: contain; padding: 4px; }
+        .asset-item-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 5, 25, 0.95);
+            color: #d8b4fe;
+            font-size: 9px;
+            padding: 4px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tab-btn {
+            padding: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+            background: var(--surface-color);
+        }
+        .tab-btn.active {
+            color: var(--primary-light);
+            border-bottom-color: var(--primary);
+        }
+
+        #text-edit-modal .modal-content {
+            height: auto;
+            padding: 24px;
+        }
+
+        button:disabled { opacity: 0.5; pointer-events: none; }
+    </style>
+<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-x-0{left:0px;right:0px}.bottom-0{bottom:0px}.left-0{left:0px}.left-1\/2{left:50%}.top-0{top:0px}.top-1\/2{top:50%}.top-4{top:1rem}.z-20{z-index:20}.z-\[100\]{z-index:100}.z-\[5\]{z-index:5}.-ml-3\.5{margin-left:-0.875rem}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.ml-1{margin-left:0.25rem}.block{display:block}.flex{display:flex}.hidden{display:none}.h-1\.5{height:0.375rem}.h-16{height:4rem}.h-3{height:0.75rem}.h-3\.5{height:0.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.h-7{height:1.75rem}.h-8{height:2rem}.max-h-36{max-height:9rem}.max-h-\[80\%\]{max-height:80%}.min-h-\[100px\]{min-height:100px}.w-10{width:2.5rem}.w-16{width:4rem}.w-3{width:0.75rem}.w-3\.5{width:0.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-7{width:1.75rem}.w-8{width:2rem}.w-full{width:100%}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.-translate-x-1\/2{--tw-translate-x:-50%;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-y-1\/2{--tw-translate-y:-50%;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-grab{cursor:grab}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.justify-around{justify-content:space-around}.gap-1{gap:0.25rem}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.gap-6{gap:1.5rem}.gap-8{gap:2rem}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.whitespace-nowrap{white-space:nowrap}.rounded{border-radius:0.25rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.\!rounded-t-3xl{border-top-left-radius:1.5rem !important;border-top-right-radius:1.5rem !important}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-t{border-top-width:1px}.\!border-purple-900\/40{border-color:rgb(88 28 135 / 0.4) !important}.border-purple-900\/10{border-color:rgb(88 28 135 / 0.1)}.border-purple-900\/30{border-color:rgb(88 28 135 / 0.3)}.border-purple-900\/45{border-color:rgb(88 28 135 / 0.45)}.border-purple-950\/40{border-color:rgb(59 7 100 / 0.4)}.border-purple-950\/50{border-color:rgb(59 7 100 / 0.5)}.border-red-900\/40{border-color:rgb(127 29 29 / 0.4)}.border-white{--tw-border-opacity:1;border-color:rgb(255 255 255 / var(--tw-border-opacity, 1))}.bg-black{--tw-bg-opacity:1;background-color:rgb(0 0 0 / var(--tw-bg-opacity, 1))}.bg-gray-900\/90{background-color:rgb(17 24 39 / 0.9)}.bg-purple-500{--tw-bg-opacity:1;background-color:rgb(168 85 247 / var(--tw-bg-opacity, 1))}.bg-purple-600{--tw-bg-opacity:1;background-color:rgb(147 51 234 / var(--tw-bg-opacity, 1))}.bg-purple-900\/20{background-color:rgb(88 28 135 / 0.2)}.bg-purple-900\/30{background-color:rgb(88 28 135 / 0.3)}.bg-purple-900\/40{background-color:rgb(88 28 135 / 0.4)}.bg-purple-950\/40{background-color:rgb(59 7 100 / 0.4)}.bg-red-950\/30{background-color:rgb(69 10 10 / 0.3)}.bg-zinc-900{--tw-bg-opacity:1;background-color:rgb(24 24 27 / var(--tw-bg-opacity, 1))}.bg-zinc-950{--tw-bg-opacity:1;background-color:rgb(9 9 11 / var(--tw-bg-opacity, 1))}.bg-zinc-950\/30{background-color:rgb(9 9 11 / 0.3)}.p-1{padding:0.25rem}.p-1\.5{padding:0.375rem}.p-2{padding:0.5rem}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.pb-1{padding-bottom:0.25rem}.pb-6{padding-bottom:1.5rem}.pb-8{padding-bottom:2rem}.pt-2{padding-top:0.5rem}.pt-3{padding-top:0.75rem}.pt-4{padding-top:1rem}.text-right{text-align:right}.font-mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}.text-\[10px\]{font-size:10px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.tracking-tight{letter-spacing:-0.025em}.tracking-wider{letter-spacing:0.05em}.text-green-400{--tw-text-opacity:1;color:rgb(74 222 128 / var(--tw-text-opacity, 1))}.text-purple-300{--tw-text-opacity:1;color:rgb(216 180 254 / var(--tw-text-opacity, 1))}.text-purple-300\/80{color:rgb(216 180 254 / 0.8)}.text-purple-400{--tw-text-opacity:1;color:rgb(192 132 252 / var(--tw-text-opacity, 1))}.text-purple-400\/80{color:rgb(192 132 252 / 0.8)}.text-purple-600\/70{color:rgb(147 51 234 / 0.7)}.text-red-400{--tw-text-opacity:1;color:rgb(248 113 113 / var(--tw-text-opacity, 1))}.text-red-500{--tw-text-opacity:1;color:rgb(239 68 68 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.accent-purple-600{accent-color:#9333ea}.opacity-0{opacity:0}.shadow-\[0_0_10px_\#9333ea\]{--tw-shadow:0 0 10px #9333ea;--tw-shadow-colored:0 0 10px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-\[0_0_12px_\#9333ea\]{--tw-shadow:0 0 12px #9333ea;--tw-shadow-colored:0 0 12px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-purple-900\/20{--tw-shadow-color:rgb(88 28 135 / 0.2);--tw-shadow:var(--tw-shadow-colored)}.shadow-purple-950\/80{--tw-shadow-color:rgb(59 7 100 / 0.8);--tw-shadow:var(--tw-shadow-colored)}.outline-none{outline:2px solid transparent;outline-offset:2px}.transition-opacity{transition-property:opacity;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.transition-transform{transition-property:transform;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.duration-300{transition-duration:300ms}.hover\:bg-purple-700:hover{--tw-bg-opacity:1;background-color:rgb(126 34 206 / var(--tw-bg-opacity, 1))}.hover\:bg-purple-900\/60:hover{background-color:rgb(88 28 135 / 0.6)}.active\:scale-90:active{--tw-scale-x:.9;--tw-scale-y:.9;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.active\:scale-95:active{--tw-scale-x:.95;--tw-scale-y:.95;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.active\:cursor-grabbing:active{cursor:grabbing}.active\:bg-purple-700:active{--tw-bg-opacity:1;background-color:rgb(126 34 206 / var(--tw-bg-opacity, 1))}.active\:bg-purple-900\/40:active{background-color:rgb(88 28 135 / 0.4)}.active\:bg-purple-900\/50:active{background-color:rgb(88 28 135 / 0.5)}.active\:bg-zinc-800:active{--tw-bg-opacity:1;background-color:rgb(39 39 42 / var(--tw-bg-opacity, 1))}.active\:text-purple-300:active{--tw-text-opacity:1;color:rgb(216 180 254 / var(--tw-text-opacity, 1))}</style><style>
+    * {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      touch-action: manipulation !important;
+      -webkit-tap-highlight-color: transparent !important;
+    }
+
+    /* Additional iOS magnifier prevention for text elements */
+    input, textarea, [contenteditable] {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+    }
+
+    /* Prevent long-press magnifier on canvas (common in games) */
+    canvas {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      touch-action: manipulation !important;
+    }
+  </style></head>
+<body style="-webkit-user-select: none; height: 100%; overscroll-behavior: contain; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;">
+
+    <!-- Hidden Audio Elements -->
+    <audio id="music-bgm" loop=""></audio>
+    <audio id="sfx-pop"></audio>
+    <audio id="sfx-whoosh"></audio>
+
+    <!-- Hidden File Input for Custom Uploads -->
+    <input type="file" id="hidden-input" style="display: none;" accept="image/*, audio/*, .mp3, .wav, .m4a, .ogg, application/octet-stream">
+
+    <!-- Toast Notification for Actions (e.g. copying HTML) -->
+    <div id="copy-toast" class="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-900/90 text-white px-4 py-3 rounded-full text-xs font-semibold shadow-lg flex items-center gap-2 pointer-events-none opacity-0 transition-opacity duration-300 z-[100]">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check-circle" aria-hidden="true" class="lucide lucide-check-circle w-4 h-4 text-green-400"><path d="M21.801 10A10 10 0 1 1 17 3.335"></path><path d="m9 11 3 3L22 4"></path></svg>
+        <span id="toast-message">HTML Copied to Clipboard!</span>
+    </div>
+
+    <div id="app">
+        <!-- Header -->
+        <header class="flex justify-between items-center p-4 bg-black border-b border-purple-900/30 flex-shrink-0 z-20 shadow-lg relative">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-purple-900/40 flex items-center justify-center text-purple-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="clapperboard" aria-hidden="true" class="lucide lucide-clapperboard w-5 h-5"><path d="m12.296 3.464 3.02 3.956"></path><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"></path><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="m6.18 5.276 3.1 3.899"></path></svg>
+                </div>
+                <h1 class="font-bold text-lg tracking-tight text-white">David's Animation Engine</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="btn-export" onclick="exportRenderedAnimation()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="download" aria-hidden="true" class="lucide lucide-download w-3.5 h-3.5"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></svg> Export
+                </button>
+                <button id="btn-settings" onclick="openSettingsModal()" class="p-2 bg-purple-900/20 rounded-full text-purple-400 active:bg-purple-900/40">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="settings" aria-hidden="true" class="lucide lucide-settings w-5 h-5"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Stage Area -->
+        <div id="stage-wrapper">
+            <div id="stage" style="background: rgb(10, 10, 10);">
+                <!-- Entities injected here -->
+            </div>
+        </div>
+
+        <!-- Timeline & Toolbar Area -->
+        <div id="timeline-area">
+            <!-- Scrubber -->
+            <div class="px-4 pt-4 pb-1 flex justify-between items-center">
+                <span id="time-display" class="font-mono text-sm font-bold text-purple-400">00:00</span>
+                <span id="max-time-display" class="font-mono text-xs text-purple-600/70">10:00</span>
+            </div>
+            <div class="scrubber-container px-4">
+                <div id="scrubber-track">
+                    <div class="w-full h-1.5 bg-zinc-950 rounded-full border border-purple-900/30"></div>
+                    <div id="timeline-track-fill" class="absolute left-0 h-1.5 bg-purple-600 rounded-full pointer-events-none shadow-[0_0_10px_#9333ea]" style="width: 0%"></div>
+                    <div id="scrubber-thumb" class="absolute w-7 h-7 rounded-full bg-purple-500 border-2 border-white shadow-[0_0_12px_#9333ea] -ml-3.5 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing z-[5]"></div>
+                    <div id="keyframe-markers" class="absolute inset-x-0 top-0 bottom-0 pointer-events-none"></div>
+                </div>
+            </div>
+
+            <!-- Play Controls -->
+            <div class="flex justify-center items-center py-2 gap-8">
+                <button id="btn-prev" title="Step Backward" class="p-2 text-purple-400 active:text-purple-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="skip-back" aria-hidden="true" class="lucide lucide-skip-back"><path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z"></path><path d="M3 20V4"></path></svg></button>
+                <button id="btn-play" class="w-16 h-16 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-950/80 active:scale-90 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="play" aria-hidden="true" class="lucide lucide-play w-8 h-8 ml-1" id="icon-play"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"></path></svg>
+                </button>
+                <button id="btn-next" title="Step Forward" class="p-2 text-purple-400 active:text-purple-300"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="skip-forward" aria-hidden="true" class="lucide lucide-skip-forward"><path d="M21 4v16"></path><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"></path></svg></button>
+            </div>
+
+            <!-- Selection Controls -->
+            <div id="selection-controls" class="px-4 py-3 border-t border-purple-950/40 hidden bg-purple-950/40 flex-col gap-3">
+                <!-- Width and Height/Length Sliders -->
+                <div class="flex flex-col gap-2 px-2">
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-[10px] font-bold text-purple-400 uppercase w-16">Width:</span>
+                        <input type="range" id="control-width" min="5" max="150" step="1" class="flex-1 accent-purple-600">
+                        <span id="control-width-label" class="font-mono text-xs text-purple-300 w-10 text-right">30%</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-[10px] font-bold text-purple-400 uppercase w-16">Height:</span>
+                        <input type="range" id="control-height" min="5" max="150" step="1" class="flex-1 accent-purple-600">
+                        <span id="control-height-label" class="font-mono text-xs text-purple-300 w-10 text-right">30%</span>
+                    </div>
+                </div>
+
+                <!-- Transform Flips & Rotation Controls -->
+                <div class="flex flex-wrap gap-2 items-center justify-around px-2 border-t border-purple-900/10 pt-2">
+                    <div class="flex items-center gap-1">
+                        <button onclick="toggleSelectedFlip('flipH')" class="p-1.5 bg-zinc-900 rounded-lg border border-purple-900/30 text-purple-300 active:scale-90 transition-transform flex items-center gap-1 text-[10px] font-bold uppercase">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="flip-horizontal" aria-hidden="true" class="lucide lucide-flip-horizontal w-3 h-3"><path d="M8 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h3"></path><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"></path><path d="M12 20v2"></path><path d="M12 14v2"></path><path d="M12 8v2"></path><path d="M12 2v2"></path></svg> Flip H
+                        </button>
+                        <button onclick="toggleSelectedFlip('flipV')" class="p-1.5 bg-zinc-900 rounded-lg border border-purple-900/30 text-purple-300 active:scale-90 transition-transform flex items-center gap-1 text-[10px] font-bold uppercase">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="flip-vertical" aria-hidden="true" class="lucide lucide-flip-vertical w-3 h-3"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"></path><path d="M21 16v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3"></path><path d="M4 12H2"></path><path d="M10 12H8"></path><path d="M16 12h-2"></path><path d="M22 12h-2"></path></svg> Flip V
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="adjustSelectedRotation(-15)" class="p-1.5 bg-zinc-900 rounded-lg border border-purple-900/30 text-purple-300 active:scale-90 transition-transform text-[10px] font-bold">Rot -15°</button>
+                        <button onclick="adjustSelectedRotation(15)" class="p-1.5 bg-zinc-900 rounded-lg border border-purple-900/30 text-purple-300 active:scale-90 transition-transform text-[10px] font-bold">Rot +15°</button>
+                    </div>
+                </div>
+
+                <!-- Opacity & Keyframe Sound Controls -->
+                <div class="flex flex-col gap-2 px-2 border-t border-purple-900/10 pt-2">
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-[10px] font-bold text-purple-400 uppercase w-16">Opacity:</span>
+                        <input type="range" id="control-opacity" min="0" max="1" step="0.05" class="flex-1 accent-purple-600">
+                        <span id="control-opacity-label" class="font-mono text-xs text-purple-300 w-10 text-right">100%</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-[10px] font-bold text-purple-400 uppercase w-16">Easing:</span>
+                        <select id="control-kf-easing" class="flex-1 bg-zinc-900 border border-purple-900/30 text-xs text-purple-300 rounded p-1 outline-none">
+                            <option value="easeInOut">Ease In Out (Smooth)</option>
+                            <option value="linear">Linear (Constant)</option>
+                            <option value="easeIn">Ease In</option>
+                            <option value="easeOut">Ease Out</option>
+                            <option value="bounce">Bounce</option>
+                            <option value="elastic">Elastic</option>
+                        </select>
+                        <span class="w-10 text-right"></span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-[10px] font-bold text-purple-400 uppercase w-16">KF Sound:</span>
+                        <select id="control-kf-sound" class="flex-1 bg-zinc-900 border border-purple-900/30 text-xs text-purple-300 rounded p-1 outline-none"><option value="">(None)</option><option value="https://prod-data.sekai.chat/aiu-music-sfx/auto/e82661b02bd0213b31e1481afe0ca82f.mp3">XP Shutdown</option><option value="https://prod-data.sekai.chat/chat-creation/3fdee741-017c-456d-8469-8db6d7983737.wav">Button</option><option value="https://prod-data.sekai.chat/chat-creation/17f16240-883b-4cc3-a91a-6fdec27b7f19.mp3">Stalker Scream</option><option value="https://prod-data.sekai.chat/chat-creation/40104670-23d4-4e81-84d7-27705dc1db1d.mp3">Screaming Scout</option><option value="https://prod-data.sekai.chat/chat-creation/d4b40b0b-d891-4a00-b66e-4aa040eceda0.wav">Victory</option><option value="https://prod-data.sekai.chat/aiu-music-sfx/88_Roblox_Oof_d306244aab8e44a8a0ed7f3fdd0dbfaf.mp3">Roblox Oof</option><option value="https://prod-data.sekai.chat/aiu-music-sfx/96_You_Are_An_Idiot_0f72b994e35f40e587deb62a963ebee6.mp3">You Are An Idiot</option><option value="https://prod-data.sekai.chat/aiu-music-sfx/24_FAH_Sound_35231118dfbc4c4f95f02595f14659f3.mp3">FAH Sound</option><option value="https://prod-data.sekai.chat/aiu-music-sfx/auto/f5ebf4a78d38ed1ad00caa4ea709d0a9.mp3">Soft Pop</option><option value="https://prod-data.sekai.chat/aiu-music-sfx/257_Roblox_Angry_6bcfce5841fb4fa1aca789d156e7a31f.mp3">Roblox Angry</option></select>
+                        <span class="w-10 text-right"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sound triggers timeline list -->
+            <div id="sound-timeline-panel" class="px-4 py-2 border-t border-purple-950/40 bg-zinc-950/30 max-h-36 overflow-y-auto hidden flex-col gap-2">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs font-bold text-purple-300 uppercase tracking-wider">Timeline Sounds</span>
+                    <button onclick="clearAllTimelineSounds()" class="text-[10px] font-bold text-red-400 bg-red-950/30 px-2 py-0.5 rounded border border-red-900/40 active:scale-95">Clear All</button>
+                </div>
+                <div id="sound-timeline-items" class="flex flex-col gap-1.5">
+                    <!-- Placed sounds list will go here -->
+                </div>
+            </div>
+
+            <div class="flex-1"></div>
+
+            <!-- Toolbar -->
+            <div class="flex justify-around px-2 pb-6 border-t border-purple-950/50 pt-3 bg-zinc-950">
+                <button class="tool-btn" onclick="openAssetModal('characters')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="users" aria-hidden="true" class="lucide lucide-users w-6 h-6 text-purple-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                    <span class="text-purple-300/80">Character</span>
+                </button>
+                <button class="tool-btn" onclick="openAssetModal('items')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="box" aria-hidden="true" class="lucide lucide-box w-6 h-6 text-purple-400"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>
+                    <span class="text-purple-300/80">Item</span>
+                </button>
+                <button class="tool-btn" onclick="addTextBubble()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="message-square" aria-hidden="true" class="lucide lucide-message-square w-6 h-6 text-purple-400"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path></svg>
+                    <span class="text-purple-300/80">Text</span>
+                </button>
+                <button class="tool-btn" onclick="openAssetModal('backgrounds')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="image" aria-hidden="true" class="lucide lucide-image w-6 h-6 text-purple-400"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg>
+                    <span class="text-purple-300/80">BG</span>
+                </button>
+                <button class="tool-btn" onclick="openAssetModal('sounds')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="music" aria-hidden="true" class="lucide lucide-music w-6 h-6 text-purple-400"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                    <span class="text-purple-300/80">Sound</span>
+                </button>
+                <button class="tool-btn text-red-500" id="btn-delete" disabled="">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="trash-2" aria-hidden="true" class="lucide lucide-trash-2 w-6 h-6"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    <span>Delete</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Browser Modal -->
+    <div id="asset-modal" class="modal-overlay" style="visibility: hidden; opacity: 0; pointer-events: none;">
+        <div class="modal-content !border-purple-900/40">
+            <div class="flex justify-between items-center p-4 border-b border-purple-900/30 flex-shrink-0 bg-zinc-950">
+                <div class="flex items-center gap-3">
+                    <h2 class="font-bold text-lg text-white">Library</h2>
+                    <!-- Upload Asset Trigger -->
+                    <button onclick="triggerCustomUpload()" class="bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="upload-cloud" aria-hidden="true" class="lucide lucide-upload-cloud w-3.5 h-3.5"><path d="M12 13v8"></path><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="m8 17 4-4 4 4"></path></svg> Add Custom
+                    </button>
+                </div>
+                <button onclick="closeModals()" class="p-2 bg-zinc-900 text-purple-300 rounded-full active:bg-zinc-800"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="x" aria-hidden="true" class="lucide lucide-x w-5 h-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+            </div>
+            <div class="flex border-b border-purple-900/30 flex-shrink-0 overflow-x-auto whitespace-nowrap bg-zinc-950">
+                <button class="flex-1 tab-btn active px-4 py-2" id="tab-characters" onclick="switchAssetTab('characters')">Characters</button>
+                <button class="flex-1 tab-btn px-4 py-2" id="tab-items" onclick="switchAssetTab('items')">Items</button>
+                <button class="flex-1 tab-btn px-4 py-2" id="tab-backgrounds" onclick="switchAssetTab('backgrounds')">Backgrounds</button>
+                <button class="flex-1 tab-btn px-4 py-2" id="tab-sounds" onclick="switchAssetTab('sounds')">Sounds</button>
+            </div>
+            <div id="asset-grid" class="asset-grid flex-1 bg-zinc-950">
+                <!-- Assets populated via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay" style="visibility: hidden; opacity: 0; pointer-events: none;">
+        <div class="modal-content !rounded-t-3xl pb-8 max-h-[80%] overflow-y-auto !border-purple-900/40 bg-zinc-950" style="touch-action: pan-y;">
+            <div class="flex justify-between items-center p-4 border-b border-purple-900/30 bg-zinc-950">
+                <h2 class="font-bold text-lg text-white">Project Settings</h2>
+                <button onclick="closeModals()" class="p-2 bg-zinc-900 text-purple-300 rounded-full active:bg-zinc-800"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="x" aria-hidden="true" class="lucide lucide-x w-5 h-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+            </div>
+            <div class="p-6 flex flex-col gap-6 bg-zinc-950">
+                <!-- Video Duration setting -->
+                <div>
+                    <label class="block text-sm font-semibold text-purple-300 mb-2">Video Duration (seconds)</label>
+                    <div class="flex items-center gap-4 mb-4">
+                        <input type="range" id="settings-duration" min="5" max="30" step="1" class="flex-1 accent-purple-600">
+                        <span id="settings-duration-label" class="font-mono text-sm font-bold text-purple-400 w-8">10s</span>
+                    </div>
+                </div>
+
+                <!-- Animation Easing setting -->
+                <div>
+                    <label class="block text-sm font-semibold text-purple-300 mb-2">Animation Easing</label>
+                    <select id="settings-easing" class="w-full bg-zinc-900 border border-purple-900/30 text-white rounded-xl p-3 outline-none text-sm accent-purple-600">
+                        <option value="easeInOut">Ease In Out (Smooth)</option>
+                        <option value="linear">Linear (Constant Speed)</option>
+                        <option value="easeIn">Ease In (Accelerating)</option>
+                        <option value="easeOut">Ease Out (Decelerating)</option>
+                        <option value="bounce">Bounce Effect</option>
+                        <option value="elastic">Elastic Effect</option>
+                    </select>
+                </div>
+
+                <!-- Export / Copy HTML -->
+                
+            </div>
+        </div>
+    </div>
+
+    <!-- Text Edit Modal -->
+    <div id="text-edit-modal" class="modal-overlay" style="visibility: hidden; opacity: 0; pointer-events: none;">
+        <div class="modal-content !rounded-t-3xl pb-8 !border-purple-900/40 bg-zinc-950">
+            <div class="flex justify-between items-center p-4 border-b border-purple-900/30 bg-zinc-950 mb-4">
+                <h2 class="font-bold text-lg text-white">Edit Text</h2>
+                <button onclick="closeModals()" class="p-2 bg-zinc-900 text-purple-300 rounded-full active:bg-zinc-800"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="x" aria-hidden="true" class="lucide lucide-x w-5 h-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+            </div>
+            <div class="px-6">
+                <textarea id="text-input" class="w-full bg-zinc-900 border border-purple-900/45 text-white rounded-xl p-4 min-h-[100px] text-lg outline-none mb-4" style="font-size: 16px;" placeholder="Type something..."></textarea>
+                <div class="flex gap-3">
+                    <button id="btn-generate-tts" onclick="handleTTSRequest()" class="flex-1 bg-purple-900/30 text-purple-300 border border-purple-900/45 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:bg-purple-900/50">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="mic" aria-hidden="true" class="lucide lucide-mic w-5 h-5"><path d="M12 19v3"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><rect x="9" y="2" width="6" height="13" rx="3"></rect></svg> Speak
+                    </button>
+                    <button onclick="saveTextEdit()" class="flex-1 bg-purple-600 text-white font-bold py-3 rounded-xl active:bg-purple-700">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- SEKAI EDITABLE METADATA ---
+        window.sekaiEditable = {
+  "tune": [
+    {
+      "id": "duration",
+      "label": "Video Duration (s)",
+      "type": "slider",
+      "min": 5,
+      "max": 30,
+      "step": 1,
+      "value": 10,
+      "path": "appState.duration"
+    }
+  ],
+  "videos": [],
+  "colors": [],
+  "text": [],
+  "prompts": [],
+  "voices": [],
+  "music": [],
+  "sfx": [
+    {
+      "id": "xp_shutdown",
+      "label": "XP Shutdown",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/aiu-music-sfx/auto/e82661b02bd0213b31e1481afe0ca82f.mp3",
+      "name": "XP Shutdown",
+      "description": "windows xp shutdown sound"
+    },
+    {
+      "id": "button",
+      "label": "Button",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/chat-creation/3fdee741-017c-456d-8469-8db6d7983737.wav",
+      "name": "Button",
+      "description": "button sound"
+    },
+    {
+      "id": "stalker_scream",
+      "label": "Stalker Scream",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/chat-creation/17f16240-883b-4cc3-a91a-6fdec27b7f19.mp3",
+      "name": "Stalker Scream",
+      "description": "hl2-stalker-scream sound"
+    },
+    {
+      "id": "screaming_scout",
+      "label": "Screaming Scout",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/chat-creation/40104670-23d4-4e81-84d7-27705dc1db1d.mp3",
+      "name": "Screaming Scout",
+      "description": "screaming-scout sound"
+    },
+    {
+      "id": "victory",
+      "label": "Victory",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/chat-creation/d4b40b0b-d891-4a00-b66e-4aa040eceda0.wav",
+      "name": "Victory",
+      "description": "victory sound"
+    },
+    {
+      "id": "roblox_oof",
+      "label": "Roblox Oof",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/aiu-music-sfx/88_Roblox_Oof_d306244aab8e44a8a0ed7f3fdd0dbfaf.mp3",
+      "name": "Roblox Oof",
+      "description": "Roblox Oof sound"
+    },
+    {
+      "id": "you_are_idiot",
+      "label": "You Are An Idiot",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/aiu-music-sfx/96_You_Are_An_Idiot_0f72b994e35f40e587deb62a963ebee6.mp3",
+      "name": "You Are An Idiot",
+      "description": "You Are An Idiot sound"
+    },
+    {
+      "id": "fah_sound",
+      "label": "FAH Sound",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/aiu-music-sfx/24_FAH_Sound_35231118dfbc4c4f95f02595f14659f3.mp3",
+      "name": "FAH Sound",
+      "description": "FAH Sound sound"
+    },
+    {
+      "id": "soft_pop",
+      "label": "Soft Pop",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/aiu-music-sfx/auto/f5ebf4a78d38ed1ad00caa4ea709d0a9.mp3",
+      "name": "Soft Pop",
+      "description": "soft pop message sent sound"
+    },
+    {
+      "id": "roblox_angry",
+      "label": "Roblox Angry",
+      "type": "audio",
+      "value": "https://prod-data.sekai.chat/aiu-music-sfx/257_Roblox_Angry_6bcfce5841fb4fa1aca789d156e7a31f.mp3",
+      "name": "Roblox Angry",
+      "description": "Roblox Angry sound"
+    }
+  ],
+  "images": []
+};
+
+        // --- STATE & DATA ---
+        window.appState = {
+  "duration": 10,
+  "currentTime": 0,
+  "playing": false,
+  "backgroundId": null,
+  "entities": [],
+  "selectedEntityId": null,
+  "lastFrameTime": 7213,
+  "easing": "easeInOut",
+  "customAssets": {
+    "characters": [],
+    "items": [],
+    "backgrounds": [],
+    "sounds": []
+  },
+  "timelineSounds": []
+};
+
+        let assetMap = { characters: [], backgrounds: [], items: [], sounds: [] };
+
+        // --- HELPERS ---
+        function getConfig(category, id) {
+            return window.sekaiEditable[category]?.find(i => i.id === id)?.value;
+        }
+        function setNestedValue(obj, path, value) {
+            const parts = path.split('.');
+            let current = obj;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (!current[parts[i]]) current[parts[i]] = {};
+                current = current[parts[i]];
+            }
+            current[parts[parts.length - 1]] = value;
+        }
+
+        function getKeyframeTimes() {
+            const times = new Set();
+            const selId = window.appState.selectedEntityId;
+            if (selId) {
+                const ent = window.appState.entities.find(e => e.id === selId);
+                if (ent) {
+                    ent.keyframes.forEach(kf => times.add(kf.time));
+                }
+            } else {
+                window.appState.entities.forEach(ent => {
+                    ent.keyframes.forEach(kf => times.add(kf.time));
+                });
+            }
+            if (times.size === 0) {
+                times.add(0);
+            }
+            return Array.from(times).sort((a, b) => a - b);
+        }
+        
+        // Iframe Communication
+        function sendMessage(type, data = null) {
+            window.parent.postMessage({
+                origin: 'sekai_gaming_iframe_api',
+                type,
+                taskId: crypto.randomUUID(),
+                data
+            }, '*');
+        }
+
+        // Audio
+        function initBGM() {
+            const el = document.getElementById('music-bgm');
+            if (!el?.src) return;
+            el.loop = true;
+            el.volume = 0.4;
+            const playBgm = () => {
+                el.play().catch(() => {
+                    document.addEventListener('touchstart', playBgm, { once: true });
+                    document.addEventListener('click', playBgm, { once: true });
+                });
+            };
+            playBgm();
+        }
+        function playSfx(id) {
+            const el = document.getElementById('sfx-' + id);
+            if (el?.src) {
+                el.currentTime = 0;
+                el.play().catch(()=>{});
+            } else {
+                // Procedural fallback
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    if (id === 'pop') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(400, ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
+                        gain.gain.setValueAtTime(0.5, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.1);
+                    } else if (id === 'whoosh') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(200, ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3);
+                        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.3);
+                    }
+                } catch(e){}
+            }
+        }
+
+        // Apply Metadata
+        function applyAllEditableValues() {
+            window.sekaiEditable.tune?.forEach(t => { if (t.path) setNestedValue(window, t.path, t.value); });
+            window.sekaiEditable.colors?.forEach(c => { if (c.cssVar) document.documentElement.style.setProperty(c.cssVar, c.value); });
+            window.sekaiEditable.music?.forEach(m => {
+                if (m.selector) {
+                    const el = document.querySelector(m.selector);
+                    if (el && el.src !== m.value) { el.src = m.value; el.load(); }
+                }
+            });
+            window.sekaiEditable.sfx?.forEach(s => {
+                if (s.selector) {
+                    const el = document.querySelector(s.selector);
+                    if (el && el.src !== s.value) { el.src = s.value; el.load(); }
+                }
+            });
+
+            // Categorize images & add custom uploaded ones to the library
+            assetMap = { characters: [], backgrounds: [], items: [], sounds: [] };
+            window.sekaiEditable.images?.forEach(img => {
+                if (img.value) {
+                    const label = img.description.split(' ')[0] || img.id;
+                    if (img.id.startsWith('c_')) assetMap.characters.push({ ...img, label });
+                    else if (img.id.startsWith('b_')) assetMap.backgrounds.push({ ...img, label });
+                    else if (img.id.startsWith('i_')) assetMap.items.push({ ...img, label });
+                }
+            });
+
+            // Populate default sfx into assetMap.sounds
+            window.sekaiEditable.sfx?.forEach(s => {
+                if (s.value) {
+                    assetMap.sounds.push({ id: s.id, label: s.name, value: s.value });
+                }
+            });
+            window.appState.customAssets.sounds.forEach(s => {
+                assetMap.sounds.push(s);
+            });
+            // Ensure uniqueness
+            assetMap.sounds = Array.from(new Set(assetMap.sounds.map(s => s.value))).map(val => {
+                return assetMap.sounds.find(s => s.value === val);
+            });
+
+            // Inject current user custom uploads into local map lists
+            window.appState.customAssets.characters.forEach(item => assetMap.characters.push(item));
+            window.appState.customAssets.items.forEach(item => assetMap.items.push(item));
+            window.appState.customAssets.backgrounds.push(...window.appState.customAssets.backgrounds);
+            // Ensure unique maps
+            assetMap.characters = Array.from(new Set(assetMap.characters.map(a => a.value))).map(val => {
+                return window.appState.customAssets.characters.find(c => c.value === val) || { id: 'cust_' + Math.random(), value: val, label: 'Custom' };
+            });
+            assetMap.items = Array.from(new Set(assetMap.items.map(a => a.value))).map(val => {
+                return window.appState.customAssets.items.find(c => c.value === val) || { id: 'cust_' + Math.random(), value: val, label: 'Custom' };
+            });
+            assetMap.backgrounds = Array.from(new Set(window.appState.customAssets.backgrounds.map(b => b.value))).map(val => {
+                return window.appState.customAssets.backgrounds.find(bg => bg.value === val) || { id: 'cust_' + Math.random(), value: val, label: 'Custom BG' };
+            });
+            populateKFSoundOptions();
+        }
+
+        function populateKFSoundOptions() {
+            const select = document.getElementById('control-kf-sound');
+            if (!select) return;
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">(None)</option>';
+            assetMap.sounds.forEach(sound => {
+                const opt = document.createElement('option');
+                opt.value = sound.value;
+                opt.textContent = sound.label;
+                select.appendChild(opt);
+            });
+            select.value = currentVal;
+        }
+
+        function updateKeyframeSound(soundUrl) {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (!ent) return;
+            
+            const time = window.appState.currentTime;
+            const threshold = 0.1;
+            let kf = ent.keyframes.find(k => Math.abs(k.time - time) < threshold);
+            if (!kf) {
+                setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                kf = ent.keyframes.find(k => Math.abs(k.time - time) < threshold);
+            }
+            if (kf) {
+                kf.sound = soundUrl || null;
+            }
+            drawKeyframeMarkers();
+        }
+
+        function updateKeyframeEasing(easingType) {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (!ent) return;
+            
+            const time = window.appState.currentTime;
+            const threshold = 0.1;
+            let kf = ent.keyframes.find(k => Math.abs(k.time - time) < threshold);
+            if (!kf) {
+                setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity, easingType);
+                kf = ent.keyframes.find(k => Math.abs(k.time - time) < threshold);
+            }
+            if (kf) {
+                kf.easing = easingType;
+            }
+            renderStage();
+        }
+
+        function exportRenderedAnimation() {
+            if (window.appState.playing) togglePlayback();
+
+            const projectData = {
+                duration: window.appState.duration,
+                backgroundId: window.appState.backgroundId,
+                entities: window.appState.entities,
+                easing: window.appState.easing,
+                timelineSounds: window.appState.timelineSounds
+            };
+
+            const playerHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rendered Animation - David's Animation Engine</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #000; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; font-family: sans-serif;
+        }
+        #stage-wrapper {
+            width: 100%; max-width: 100vh; aspect-ratio: 16/9;
+            position: relative; overflow: hidden; background: #0a0a0a;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        @media (min-aspect-ratio: 16/9) {
+            #stage-wrapper { height: 100%; width: auto; }
+        }
+        #stage {
+            width: 100%; height: 100%; position: relative;
+            background-size: cover; background-position: center;
+            background-repeat: no-repeat; background-color: #0a0a0a;
+        }
+        .stage-entity {
+            position: absolute; transform: translate(-50%, -50%);
+            transform-origin: center center; will-change: transform, left, top;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .stage-entity img { width: 100%; height: 100%; object-fit: fill; }
+        .stage-entity.type-text {
+            background: #1e1e1e; color: #f3f4f6; padding: 10px 16px;
+            border-radius: 12px; border: 2px solid #9333ea;
+            box-shadow: 0 0 15px rgba(147, 51, 234, 0.3);
+            font-weight: 600; white-space: pre-wrap; text-align: center;
+            min-width: 80px; max-width: 250px; word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div id="stage-wrapper">
+        <div id="stage" style="background-image: url('${projectData.backgroundId || ''}')"></div>
+    </div>
+
+    <script>
+        const project = ${JSON.stringify(projectData)};
+        let currentTime = 0;
+        let playing = true;
+        let lastFrameTime = 0;
+
+        const easings = {
+            linear: t => t,
+            easeIn: t => t * t,
+            easeOut: t => t * (2 - t),
+            easeInOut: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+            bounce: t => {
+                const n1 = 7.5625; const d1 = 2.75;
+                if (t < 1 / d1) return n1 * t * t;
+                else if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+                else if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+                else return n1 * (t -= 2.625 / d1) * t + 0.984375;
+            },
+            elastic: t => {
+                const c4 = (2 * Math.PI) / 3;
+                return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+            }
+        };
+
+        function startPlayback() {
+            lastFrameTime = performance.now();
+            requestAnimationFrame(loop);
+            
+            const unlock = () => {
+                document.removeEventListener('click', unlock);
+                document.removeEventListener('touchstart', unlock);
+            };
+            document.addEventListener('click', unlock);
+            document.addEventListener('touchstart', unlock);
+        }
+
+        function playSounds(prevTime, currTime) {
+            project.timelineSounds.forEach(sound => {
+                if (sound.time > prevTime && sound.time <= currTime) {
+                    const audio = new Audio(sound.url);
+                    audio.volume = sound.volume || 0.8;
+                    audio.play().catch(e => {});
+                }
+            });
+            project.entities.forEach(entity => {
+                entity.keyframes.forEach(kf => {
+                    if (kf.time > prevTime && kf.time <= currTime && kf.sound) {
+                        const audio = new Audio(kf.sound);
+                        audio.volume = 0.8;
+                        audio.play().catch(e => {});
+                    }
+                });
+            });
+        }
+
+        function getInterpolatedState(entity, time) {
+            const kfs = entity.keyframes;
+            if (kfs.length === 0) return { x: 50, y: 50, width: entity.width || 30, height: entity.height || 30, rotation: entity.rotation || 0, opacity: entity.opacity ?? 1 };
+            if (kfs.length === 1) return { x: kfs[0].x, y: kfs[0].y, width: kfs[0].width || entity.width || 30, height: kfs[0].height || entity.height || 30, rotation: kfs[0].rotation || entity.rotation || 0, opacity: kfs[0].opacity ?? entity.opacity ?? 1 };
+            
+            let k1 = kfs[0], k2 = kfs[kfs.length - 1];
+            for (let i = 0; i < kfs.length - 1; i++) {
+                if (kfs[i].time <= time && kfs[i+1].time >= time) {
+                    k1 = kfs[i]; k2 = kfs[i+1];
+                    break;
+                }
+            }
+            if (time <= k1.time) return { x: k1.x, y: k1.y, width: k1.width || entity.width || 30, height: k1.height || entity.height || 30, rotation: k1.rotation || entity.rotation || 0, opacity: k1.opacity ?? entity.opacity ?? 1 };
+            if (time >= k2.time) return { x: k2.x, y: k2.y, width: k2.width || entity.width || 30, height: k2.height || entity.height || 30, rotation: k2.rotation || entity.rotation || 0, opacity: k2.opacity ?? entity.opacity ?? 1 };
+            
+            const rawProgress = (time - k1.time) / (k2.time - k1.time);
+            const easingType = k1.easing || project.easing || 'easeInOut';
+            const easingFn = easings[easingType] || easings.easeInOut;
+            const progress = easingFn(rawProgress);
+            
+            const r1 = k1.rotation || 0;
+            const r2 = k2.rotation || 0;
+            let diff = (r2 - r1 + 180) % 360 - 180;
+            if (diff < -180) diff += 360;
+            const rot = r1 + diff * progress;
+
+            return {
+                x: k1.x + (k2.x - k1.x) * progress,
+                y: k1.y + (k2.y - k1.y) * progress,
+                width: (k1.width || entity.width || 30) + ((k2.width || entity.width || 30) - (k1.width || entity.width || 30)) * progress,
+                height: (k1.height || entity.height || 30) + ((k2.height || entity.height || 30) - (k1.height || entity.height || 30)) * progress,
+                rotation: rot,
+                opacity: (k1.opacity ?? 1) + ((k2.opacity ?? 1) - (k1.opacity ?? 1)) * progress
+            };
+        }
+
+        function loop(time) {
+            if (!playing) return;
+            const delta = (time - lastFrameTime) / 1000;
+            const prevTime = currentTime;
+            currentTime += delta;
+            
+            playSounds(prevTime, currentTime);
+
+            if (currentTime >= project.duration) {
+                currentTime = 0;
+            }
+
+            const stage = document.getElementById('stage');
+            project.entities.forEach(entity => {
+                let el = document.getElementById(entity.id);
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = entity.id;
+                    el.className = 'stage-entity type-' + entity.type;
+                    if (entity.type === 'image') {
+                        const img = document.createElement('img');
+                        img.src = entity.content;
+                        el.appendChild(img);
+                    } else {
+                        el.textContent = entity.content;
+                        el.classList.add('type-text');
+                    }
+                    stage.appendChild(el);
+                }
+                const state = getInterpolatedState(entity, currentTime);
+                el.style.left = state.x + '%';
+                el.style.top = state.y + '%';
+                el.style.width = state.width + '%';
+                el.style.height = state.height + '%';
+                el.style.opacity = state.opacity;
+                const fH = entity.flipH ? -1 : 1;
+                const fV = entity.flipV ? -1 : 1;
+                el.style.transform = 'translate(-50%, -50%) rotate(' + state.rotation + 'deg) scale(' + fH + ',' + fV + ')';
+            });
+
+            lastFrameTime = time;
+            requestAnimationFrame(loop);
+        }
+    <\/script>
+</body>
+</html>`;
+
+            const blob = new Blob([playerHtml], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "rendered-animation.html";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Animation exported successfully!');
+        }
+
+        // Direct Sizing helper supporting independent width and height
+        function adjustSelectedSize(dimension, multiplier) {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (ent) {
+                if (dimension === 'width') {
+                    ent.width = Math.max(5, Math.min(150, Math.round((ent.width || 30) * multiplier)));
+                } else {
+                    ent.height = Math.max(5, Math.min(150, Math.round((ent.height || 30) * multiplier)));
+                }
+                setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                renderStage();
+            }
+        }
+
+        function adjustSelectedRotation(degrees) {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (ent) {
+                ent.rotation = ((ent.rotation || 0) + degrees) % 360;
+                setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                renderStage();
+            }
+        }
+
+        function toggleSelectedFlip(type) {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (ent) {
+                ent[type] = !ent[type];
+                setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                renderStage();
+            }
+        }
+
+        // --- CORE LOGIC ---
+
+        function initApp() {
+            applyAllEditableValues();
+            initBGM();
+            lucide.createIcons();
+
+            // Default Setup (safe check for empty assets on initialization)
+            if (assetMap.backgrounds && assetMap.backgrounds.length > 0) {
+                setBackground(assetMap.backgrounds[0].value);
+            } else {
+                // Dark starting canvas color
+                document.getElementById('stage').style.background = '#0a0a0a';
+            }
+
+            setupUI();
+            setupDrag();
+            setupGestures(); // Multi-touch Pinch & Rotate
+            requestAnimationFrame(gameLoop);
+        }
+
+        function setupUI() {
+            setupScrubber();
+
+            document.getElementById('btn-play').addEventListener('click', togglePlayback);
+            
+            // Forward / Reverse (Step keyframes only)
+            document.getElementById('btn-prev').addEventListener('click', () => { 
+                const times = getKeyframeTimes();
+                let currIdx = times.findIndex(t => Math.abs(t - window.appState.currentTime) < 0.05);
+                if (currIdx === -1) {
+                    const prev = [...times].reverse().find(t => t < window.appState.currentTime - 0.05);
+                    window.appState.currentTime = prev !== undefined ? prev : times[times.length - 1];
+                } else {
+                    let prevIdx = currIdx - 1;
+                    if (prevIdx < 0) prevIdx = times.length - 1; // Cycle!
+                    window.appState.currentTime = times[prevIdx];
+                }
+                updateTimelineUI(); 
+                renderStage(); 
+            });
+            document.getElementById('btn-next').addEventListener('click', () => { 
+                const times = getKeyframeTimes();
+                let currIdx = times.findIndex(t => Math.abs(t - window.appState.currentTime) < 0.05);
+                if (currIdx === -1) {
+                    const next = times.find(t => t > window.appState.currentTime + 0.05);
+                    window.appState.currentTime = next !== undefined ? next : times[0];
+                } else {
+                    let nextIdx = currIdx + 1;
+                    if (nextIdx >= times.length) nextIdx = 0; // Cycle!
+                    window.appState.currentTime = times[nextIdx];
+                }
+                updateTimelineUI(); 
+                renderStage(); 
+            });
+
+            // Settings Modal inputs & sync
+            const setDur = document.getElementById('settings-duration');
+            if (setDur) {
+                setDur.value = window.appState.duration;
+                document.getElementById('settings-duration-label').textContent = setDur.value + 's';
+                document.getElementById('max-time-display').textContent = setDur.value + ':00';
+                setDur.addEventListener('input', (e) => {
+                    const dur = parseInt(e.target.value);
+                    window.appState.duration = dur;
+                    document.getElementById('settings-duration-label').textContent = dur + 's';
+                    document.getElementById('max-time-display').textContent = dur + ':00';
+                    if (window.appState.currentTime > dur) {
+                        window.appState.currentTime = dur;
+                    }
+                    updateTimelineUI();
+                });
+            }
+
+            document.getElementById('btn-delete').addEventListener('click', deleteSelected);
+            
+            // Opacity slider listener
+            const opacitySlider = document.getElementById('control-opacity');
+            if (opacitySlider) {
+                opacitySlider.addEventListener('input', (e) => {
+                    const id = window.appState.selectedEntityId;
+                    if (!id) return;
+                    const ent = window.appState.entities.find(en => en.id === id);
+                    if (ent) {
+                        const val = parseFloat(e.target.value);
+                        ent.opacity = val;
+                        document.getElementById('control-opacity-label').textContent = Math.round(val * 100) + '%';
+                        setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, val);
+                        renderStage();
+                    }
+                });
+            }
+
+            // Width slider listener
+            const widthSlider = document.getElementById('control-width');
+            if (widthSlider) {
+                widthSlider.addEventListener('input', (e) => {
+                    const id = window.appState.selectedEntityId;
+                    if (!id) return;
+                    const ent = window.appState.entities.find(en => en.id === id);
+                    if (ent) {
+                        const val = parseInt(e.target.value);
+                        ent.width = val;
+                        document.getElementById('control-width-label').textContent = val + '%';
+                        setKeyframe(id, undefined, undefined, val, ent.height, ent.rotation, ent.opacity);
+                        renderStage();
+                    }
+                });
+            }
+
+            // Height slider listener
+            const heightSlider = document.getElementById('control-height');
+            if (heightSlider) {
+                heightSlider.addEventListener('input', (e) => {
+                    const id = window.appState.selectedEntityId;
+                    if (!id) return;
+                    const ent = window.appState.entities.find(en => en.id === id);
+                    if (ent) {
+                        const val = parseInt(e.target.value);
+                        ent.height = val;
+                        document.getElementById('control-height-label').textContent = val + '%';
+                        setKeyframe(id, undefined, undefined, ent.width, val, ent.rotation, ent.opacity);
+                        renderStage();
+                    }
+                });
+            }
+
+            // Keyframe Sound Select listener
+            const kfSoundSelect = document.getElementById('control-kf-sound');
+            if (kfSoundSelect) {
+                kfSoundSelect.addEventListener('change', (e) => {
+                    updateKeyframeSound(e.target.value);
+                });
+            }
+
+            // Easing dropdown listener
+            const setEasing = document.getElementById('settings-easing');
+            if (setEasing) {
+                setEasing.value = window.appState.easing || 'easeInOut';
+                setEasing.addEventListener('change', (e) => {
+                    window.appState.easing = e.target.value;
+                    renderStage();
+                });
+            }
+
+            // Keyframe Easing listener
+            const kfEasingSelect = document.getElementById('control-kf-easing');
+            if (kfEasingSelect) {
+                kfEasingSelect.addEventListener('change', (e) => {
+                    updateKeyframeEasing(e.target.value);
+                });
+            }
+            
+            // Stage deselect
+            document.getElementById('stage-wrapper').addEventListener('pointerdown', (e) => {
+                if (e.target.id === 'stage' || e.target.id === 'stage-wrapper') {
+                    selectEntity(null);
+                }
+            });
+
+            // Hidden file input change listener
+            document.getElementById('hidden-input').addEventListener('change', handleFileInput);
+        }
+
+        // Custom pointer-controlled timeline scrubber
+        function setupScrubber() {
+            const track = document.getElementById('scrubber-track');
+            let isDragging = false;
+
+            function updateFromPointer(e) {
+                const rect = track.getBoundingClientRect();
+                let clientX = e.clientX;
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                }
+                let pct = (clientX - rect.left) / rect.width;
+                pct = Math.max(0, Math.min(1, pct));
+                window.appState.currentTime = pct * window.appState.duration;
+                updateTimelineUI();
+                renderStage();
+            }
+
+            track.addEventListener('pointerdown', (e) => {
+                isDragging = true;
+                track.setPointerCapture(e.pointerId);
+                updateFromPointer(e);
+            });
+
+            track.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                updateFromPointer(e);
+            });
+
+            const stopDrag = (e) => {
+                if (isDragging) {
+                    track.releasePointerCapture(e.pointerId);
+                    isDragging = false;
+                }
+            };
+
+            track.addEventListener('pointerup', stopDrag);
+            track.addEventListener('pointercancel', stopDrag);
+        }
+
+        // --- TIMELINE & PLAYBACK ---
+        
+        function togglePlayback() {
+            window.appState.playing = !window.appState.playing;
+            window.appState.lastFrameTime = performance.now();
+            
+            const icon = document.getElementById('icon-play');
+            if (window.appState.playing) {
+                if (window.appState.currentTime >= window.appState.duration) window.appState.currentTime = 0;
+                icon.setAttribute('data-lucide', 'pause');
+            } else {
+                icon.setAttribute('data-lucide', 'play');
+            }
+            lucide.createIcons();
+        }
+
+        // Play sounds at current timeline frame
+        function playTimelineSounds(prevTime, currTime) {
+            // Global timeline sounds
+            window.appState.timelineSounds.forEach(sound => {
+                if (sound.time > prevTime && sound.time <= currTime) {
+                    const audio = new Audio(sound.url);
+                    audio.volume = sound.volume !== undefined ? sound.volume : 0.8;
+                    audio.play().catch(e => console.log('Timeline sound play failed', e));
+                }
+            });
+
+            // Keyframe-associated sounds
+            window.appState.entities.forEach(entity => {
+                entity.keyframes.forEach(kf => {
+                    if (kf.time > prevTime && kf.time <= currTime && kf.sound) {
+                        const audio = new Audio(kf.sound);
+                        audio.volume = 0.8;
+                        audio.play().catch(e => console.log('Keyframe sound play failed', e));
+                    }
+                });
+            });
+        }
+
+        function gameLoop(time) {
+            if (window.appState.playing) {
+                const prevTime = window.appState.currentTime;
+                const delta = (time - window.appState.lastFrameTime) / 1000;
+                window.appState.currentTime += delta;
+                
+                // Trigger sound playbacks
+                playTimelineSounds(prevTime, window.appState.currentTime);
+
+                if (window.appState.currentTime >= window.appState.duration) {
+                    window.appState.currentTime = window.appState.duration;
+                    togglePlayback();
+                }
+                
+                updateTimelineUI();
+            }
+            
+            renderStage();
+            window.appState.lastFrameTime = time;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateTimelineUI() {
+            const time = window.appState.currentTime;
+            
+            // Format 00:00
+            const secs = Math.floor(time);
+            const ms = Math.floor((time % 1) * 100);
+            document.getElementById('time-display').textContent = `${secs.toString().padStart(2, '0')}:${ms.toString().padStart(2, '0')}`;
+            
+            // Fill
+            const pct = (time / window.appState.duration) * 100;
+            document.getElementById('timeline-track-fill').style.width = `${pct}%`;
+            document.getElementById('scrubber-thumb').style.left = `${pct}%`;
+            
+            drawKeyframeMarkers();
+            syncSelectionUI();
+        }
+
+        function syncSelectionUI() {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (!ent) return;
+
+            const state = getInterpolatedState(ent, window.appState.currentTime);
+
+            // Sync Opacity Slider
+            const opacitySlider = document.getElementById('control-opacity');
+            if (opacitySlider) {
+                opacitySlider.value = state.opacity;
+                document.getElementById('control-opacity-label').textContent = Math.round(state.opacity * 100) + '%';
+            }
+
+            // Sync Width Slider
+            const widthSlider = document.getElementById('control-width');
+            if (widthSlider) {
+                widthSlider.value = state.width;
+                document.getElementById('control-width-label').textContent = Math.round(state.width) + '%';
+            }
+
+            // Sync Height Slider
+            const heightSlider = document.getElementById('control-height');
+            if (heightSlider) {
+                heightSlider.value = state.height;
+                document.getElementById('control-height-label').textContent = Math.round(state.height) + '%';
+            }
+
+            // Sync Keyframe Sound Trigger Selector
+            const time = window.appState.currentTime;
+            const threshold = 0.1;
+            const kf = ent.keyframes.find(k => Math.abs(k.time - time) < threshold);
+            const kfSoundSelect = document.getElementById('control-kf-sound');
+            if (kfSoundSelect) {
+                kfSoundSelect.value = kf?.sound || '';
+            }
+
+            // Sync Keyframe Easing
+            const kfEasingSelect = document.getElementById('control-kf-easing');
+            if (kfEasingSelect) {
+                kfEasingSelect.value = kf?.easing || window.appState.easing || 'easeInOut';
+            }
+        }
+
+        function drawKeyframeMarkers() {
+            const container = document.getElementById('keyframe-markers');
+            container.innerHTML = '';
+            
+            const entity = window.appState.entities.find(e => e.id === window.appState.selectedEntityId);
+            if (!entity) return;
+            
+            entity.keyframes.forEach(kf => {
+                const pct = (kf.time / window.appState.duration) * 100;
+                const marker = document.createElement('div');
+                marker.className = 'keyframe-marker';
+                marker.style.left = `${pct}%`;
+                container.appendChild(marker);
+            });
+        }
+
+        // --- STAGE RENDERING & LOGIC ---
+
+        function renderStage() {
+            const stage = document.getElementById('stage');
+            const time = window.appState.currentTime;
+            
+            // Clean up deleted entities from the DOM
+            const currentIds = window.appState.entities.map(e => e.id);
+            const domEntities = stage.querySelectorAll('.stage-entity');
+            domEntities.forEach(el => {
+                if (!currentIds.includes(el.id)) {
+                    el.remove();
+                }
+            });
+
+            window.appState.entities.forEach(entity => {
+                let el = document.getElementById(entity.id);
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = entity.id;
+                    el.className = `stage-entity type-${entity.type}`;
+                    
+                    if (entity.type === 'image') {
+                        const img = document.createElement('img');
+                        img.src = entity.content;
+                        el.appendChild(img);
+                    } else if (entity.type === 'text') {
+                        el.textContent = entity.content;
+                    }
+                    
+                    // Add handles for interactive selection
+                    const handleResize = document.createElement('div');
+                    handleResize.className = 'handle handle-resize';
+                    handleResize.dataset.type = 'resize';
+                    el.appendChild(handleResize);
+
+                    const handleRotate = document.createElement('div');
+                    handleRotate.className = 'handle handle-rotate';
+                    handleRotate.dataset.type = 'rotate';
+                    el.appendChild(handleRotate);
+
+                    stage.appendChild(el);
+                }
+                
+                // Interpolate Position, scale/width, height, rotation, and opacity
+                const state = getInterpolatedState(entity, time);
+                el.style.left = `${state.x}%`;
+                el.style.top = `${state.y}%`;
+                
+                // Apply Width, Height & Transform (Scale, Rotate, Flip Horizontal/Vertical)
+                el.style.width = `${state.width}%`;
+                el.style.height = `${state.height}%`;
+                el.style.opacity = state.opacity;
+                
+                const rot = state.rotation;
+                const fH = entity.flipH ? -1 : 1;
+                const fV = entity.flipV ? -1 : 1;
+                el.style.transform = `translate(-50%, -50%) rotate(${rot}deg) scale(${fH}, ${fV})`;
+                
+                if (entity.id === window.appState.selectedEntityId) {
+                    el.classList.add('selected');
+                } else {
+                    el.classList.remove('selected');
+                }
+            });
+        }
+
+        const easings = {
+            linear: t => t,
+            easeIn: t => t * t,
+            easeOut: t => t * (2 - t),
+            easeInOut: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+            bounce: t => {
+                const n1 = 7.5625;
+                const d1 = 2.75;
+                if (t < 1 / d1) {
+                    return n1 * t * t;
+                } else if (t < 2 / d1) {
+                    return n1 * (t -= 1.5 / d1) * t + 0.75;
+                } else if (t < 2.5 / d1) {
+                    return n1 * (t -= 2.25 / d1) * t + 0.9375;
+                } else {
+                    return n1 * (t -= 2.625 / d1) * t + 0.984375;
+                }
+            },
+            elastic: t => {
+                const c4 = (2 * Math.PI) / 3;
+                return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+            }
+        };
+
+        function getInterpolatedState(entity, time) {
+            const kfs = entity.keyframes;
+            if (kfs.length === 0) {
+                return { x: 50, y: 50, width: entity.width || 30, height: entity.height || 30, rotation: entity.rotation || 0, opacity: entity.opacity ?? 1 };
+            }
+            if (kfs.length === 1) {
+                return { 
+                    x: kfs[0].x, 
+                    y: kfs[0].y, 
+                    width: kfs[0].width ?? entity.width ?? 30, 
+                    height: kfs[0].height ?? entity.height ?? 30, 
+                    rotation: kfs[0].rotation ?? entity.rotation ?? 0,
+                    opacity: kfs[0].opacity ?? entity.opacity ?? 1
+                };
+            }
+            
+            // Find surrounding keyframes
+            let k1 = kfs[0], k2 = kfs[kfs.length - 1];
+            for (let i = 0; i < kfs.length - 1; i++) {
+                if (kfs[i].time <= time && kfs[i+1].time >= time) {
+                    k1 = kfs[i];
+                    k2 = kfs[i+1];
+                    break;
+                }
+            }
+            
+            if (time <= k1.time) {
+                return { 
+                    x: k1.x, 
+                    y: k1.y, 
+                    width: k1.width ?? entity.width ?? 30, 
+                    height: k1.height ?? entity.height ?? 30, 
+                    rotation: k1.rotation ?? entity.rotation ?? 0,
+                    opacity: k1.opacity ?? entity.opacity ?? 1
+                };
+            }
+            if (time >= k2.time) {
+                return { 
+                    x: k2.x, 
+                    y: k2.y, 
+                    width: k2.width ?? entity.width ?? 30, 
+                    height: k2.height ?? entity.height ?? 30, 
+                    rotation: k2.rotation ?? entity.rotation ?? 0,
+                    opacity: k2.opacity ?? entity.opacity ?? 1
+                };
+            }
+            
+            const rawProgress = (time - k1.time) / (k2.time - k1.time);
+            const easingType = k1.easing || window.appState.easing || 'easeInOut';
+            const easingFn = easings[easingType] || easings.easeInOut;
+            const progress = easingFn(rawProgress);
+            
+            // Rotation interpolation handling (shortest path)
+            const r1 = k1.rotation ?? entity.rotation ?? 0;
+            const r2 = k2.rotation ?? entity.rotation ?? 0;
+            let diff = (r2 - r1 + 180) % 360 - 180;
+            if (diff < -180) diff += 360;
+            const rot = r1 + diff * progress;
+
+            return {
+                x: k1.x + (k2.x - k1.x) * progress,
+                y: k1.y + (k2.y - k1.y) * progress,
+                width: (k1.width ?? entity.width ?? 30) + ((k2.width ?? entity.width ?? 30) - (k1.width ?? entity.width ?? 30)) * progress,
+                height: (k1.height ?? entity.height ?? 30) + ((k2.height ?? entity.height ?? 30) - (k1.height ?? entity.height ?? 30)) * progress,
+                rotation: rot,
+                opacity: (k1.opacity ?? entity.opacity ?? 1) + ((k2.opacity ?? entity.opacity ?? 1) - (k1.opacity ?? entity.opacity ?? 1)) * progress
+            };
+        }
+
+        function setKeyframe(entityId, x, y, width, height, rotation, opacity, easing) {
+            const entity = window.appState.entities.find(e => e.id === entityId);
+            if (!entity) return;
+            
+            const time = window.appState.currentTime;
+            const threshold = 0.1; // 100ms tolerance
+            
+            let existingIdx = entity.keyframes.findIndex(k => Math.abs(k.time - time) < threshold);
+            
+            const currentState = getInterpolatedState(entity, time);
+            const finalX = x !== undefined ? x : currentState.x;
+            const finalY = y !== undefined ? y : currentState.y;
+            const finalWidth = width !== undefined ? width : currentState.width;
+            const finalHeight = height !== undefined ? height : currentState.height;
+            const finalRot = rotation !== undefined ? rotation : currentState.rotation;
+            const finalOpacity = opacity !== undefined ? opacity : currentState.opacity;
+            const finalEasing = easing !== undefined ? easing : (existingIdx >= 0 ? entity.keyframes[existingIdx].easing : undefined);
+
+            if (existingIdx >= 0) {
+                entity.keyframes[existingIdx].x = finalX;
+                entity.keyframes[existingIdx].y = finalY;
+                entity.keyframes[existingIdx].width = finalWidth;
+                entity.keyframes[existingIdx].height = finalHeight;
+                entity.keyframes[existingIdx].rotation = finalRot;
+                entity.keyframes[existingIdx].opacity = finalOpacity;
+                if (easing !== undefined) entity.keyframes[existingIdx].easing = finalEasing;
+            } else {
+                entity.keyframes.push({ 
+                    time, 
+                    x: finalX, 
+                    y: finalY, 
+                    width: finalWidth, 
+                    height: finalHeight, 
+                    rotation: finalRot, 
+                    opacity: finalOpacity,
+                    easing: finalEasing
+                });
+                entity.keyframes.sort((a, b) => a.time - b.time);
+            }
+            drawKeyframeMarkers();
+        }
+
+        function addEntity(type, content, x=50, y=50, width=30, height=30) {
+            const id = 'ent_' + Math.random().toString(36).substr(2, 9);
+            window.appState.entities.push({
+                id, type, content, width, height,
+                rotation: 0,
+                opacity: 1,
+                flipH: false,
+                flipV: false,
+                keyframes: [{ time: window.appState.currentTime, x, y, width, height, rotation: 0, opacity: 1 }]
+            });
+            selectEntity(id);
+            playSfx('pop');
+            renderStage();
+        }
+
+        function setBackground(url) {
+            document.getElementById('stage').style.backgroundImage = `url('${url}')`;
+            window.appState.backgroundId = url;
+            playSfx('whoosh');
+        }
+
+        function selectEntity(id) {
+            window.appState.selectedEntityId = id;
+            const delBtn = document.getElementById('btn-delete');
+            if (delBtn) delBtn.disabled = !id;
+            
+            const controls = document.getElementById('selection-controls');
+            if (controls) {
+                if (id) {
+                    controls.classList.remove('hidden');
+                    controls.classList.add('flex');
+                    syncSelectionUI();
+                } else {
+                    controls.classList.add('hidden');
+                    controls.classList.remove('flex');
+                }
+            }
+            
+            drawKeyframeMarkers();
+            renderStage();
+        }
+
+        // Gesture controls setup for mobile-first pinch-to-resize and rotate
+        function setupGestures() {
+            const stage = document.getElementById('stage');
+            let activeTouches = {};
+            let startDist = 0;
+            let startAngle = 0;
+            let startWidth = 0;
+            let startHeight = 0;
+            let startRotation = 0;
+
+            stage.addEventListener('touchstart', (e) => {
+                const id = window.appState.selectedEntityId;
+                if (!id) return;
+                const ent = window.appState.entities.find(e => e.id === id);
+                if (!ent) return;
+
+                for (let i = 0; i < e.touches.length; i++) {
+                    const touch = e.touches[i];
+                    activeTouches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
+                }
+
+                if (e.touches.length === 2) {
+                    // Two fingers on screen: compute starting metrics
+                    const t1 = e.touches[0];
+                    const t2 = e.touches[1];
+                    startDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                    startAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * 180 / Math.PI;
+                    startWidth = ent.width || 30;
+                    startHeight = ent.height || 30;
+                    startRotation = ent.rotation || 0;
+                }
+            }, { passive: true });
+
+            stage.addEventListener('touchmove', (e) => {
+                const id = window.appState.selectedEntityId;
+                if (!id) return;
+                const ent = window.appState.entities.find(e => e.id === id);
+                if (!ent) return;
+
+                if (e.touches.length === 2) {
+                    const t1 = e.touches[0];
+                    const t2 = e.touches[1];
+                    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                    const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * 180 / Math.PI;
+
+                    // Resize logic (Scale)
+                    if (startDist > 0) {
+                        const ratio = dist / startDist;
+                        ent.width = Math.max(5, Math.min(150, Math.round(startWidth * ratio)));
+                        ent.height = Math.max(5, Math.min(150, Math.round(startHeight * ratio)));
+                    }
+
+                    // Rotation logic
+                    const deltaAngle = angle - startAngle;
+                    ent.rotation = Math.round((startRotation + deltaAngle) % 360);
+
+                    setKeyframe(id, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                    renderStage();
+                }
+            }, { passive: true });
+
+            const handleTouchEnd = (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    delete activeTouches[e.changedTouches[i].identifier];
+                }
+                if (Object.keys(activeTouches).length < 2) {
+                    startDist = 0;
+                    startAngle = 0;
+                }
+            };
+
+            stage.addEventListener('touchend', handleTouchEnd, { passive: true });
+            stage.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+        }
+
+        // --- TTS SYSTEM ---
+        
+        async function handleTTSRequest() {
+            const text = document.getElementById('text-input').value.trim();
+            if (!text) return;
+            
+            const btn = document.getElementById('btn-generate-tts');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> Loading...';
+            lucide.createIcons();
+
+            // Request voice generation
+            sendMessage('gen_voice', { text: text, voiceId: 86 }); // Genki Girl as default
+        }
+
+        // Global message listener for TTS response
+        window.addEventListener('message', (event) => {
+            const msg = event.data;
+            if (msg?.origin !== 'sekai_gaming_iframe_api') return;
+            
+            if (msg.type === 'receive_gen_voice' && msg.data?.audioBase64) {
+                const btn = document.getElementById('btn-generate-tts');
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="mic" class="w-5 h-5"></i> Speak';
+                lucide.createIcons();
+                
+                const audio = new Audio(msg.data.audioBase64);
+                audio.play().catch(e => console.error("Audio play failed", e));
+            }
+        });
+
+        function deleteSelected() {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            window.appState.entities = window.appState.entities.filter(e => e.id !== id);
+            const el = document.getElementById(id);
+            if (el) el.remove();
+            selectEntity(null);
+            playSfx('whoosh');
+        }
+
+        // --- DRAG & DROP ---
+
+        function setupDrag() {
+            const stage = document.getElementById('stage');
+            let draggingEntity = null;
+            let dragMode = 'move'; // 'move', 'resize', 'rotate'
+            let dragOffset = { x: 0, y: 0 };
+            let initialEntityData = {};
+            
+            stage.addEventListener('pointerdown', (e) => {
+                const targetHandle = e.target.closest('.handle');
+                const targetEntity = e.target.closest('.stage-entity');
+                
+                if (!targetEntity) return;
+                
+                // Stop playback on interaction
+                if (window.appState.playing) togglePlayback();
+                
+                const id = targetEntity.id;
+                selectEntity(id);
+                draggingEntity = id;
+                targetEntity.setPointerCapture(e.pointerId);
+                
+                const rect = targetEntity.getBoundingClientRect();
+                const stageRect = stage.getBoundingClientRect();
+                
+                // Check if we hit a handle
+                if (targetHandle) {
+                    dragMode = targetHandle.dataset.type;
+                    e.stopPropagation();
+                } else {
+                    dragMode = 'move';
+                }
+
+                const ent = window.appState.entities.find(en => en.id === id);
+                initialEntityData = {
+                    width: ent.width || 30,
+                    height: ent.height || 30,
+                    rotation: ent.rotation || 0,
+                    opacity: ent.opacity ?? 1,
+                    centerX: rect.left + rect.width/2,
+                    centerY: rect.top + rect.height/2,
+                    startX: e.clientX,
+                    startY: e.clientY
+                };
+
+                // Calculate grab offset from center for move
+                dragOffset.x = e.clientX - initialEntityData.centerX;
+                dragOffset.y = e.clientY - initialEntityData.centerY;
+                
+                targetEntity.style.transition = 'none';
+            });
+            
+            stage.addEventListener('pointermove', (e) => {
+                if (!draggingEntity) return;
+                
+                const ent = window.appState.entities.find(en => en.id === draggingEntity);
+                const stageRect = stage.getBoundingClientRect();
+                
+                if (dragMode === 'move') {
+                    // Target center in px relative to stage
+                    let targetX = (e.clientX - stageRect.left - dragOffset.x);
+                    let targetY = (e.clientY - stageRect.top - dragOffset.y);
+                    
+                    let pctX = (targetX / stageRect.width) * 100;
+                    let pctY = (targetY / stageRect.height) * 100;
+                    
+                    pctX = Math.max(0, Math.min(100, pctX));
+                    pctY = Math.max(0, Math.min(100, pctY));
+                    
+                    const el = document.getElementById(draggingEntity);
+                    if (el) {
+                        el.style.left = `${pctX}%`;
+                        el.style.top = `${pctY}%`;
+                    }
+                    setKeyframe(draggingEntity, pctX, pctY, ent.width, ent.height, ent.rotation, ent.opacity);
+                } 
+                else if (dragMode === 'resize') {
+                    // Distance from center to current pointer
+                    const dx = e.clientX - initialEntityData.centerX;
+                    const dy = e.clientY - initialEntityData.centerY;
+                    
+                    // Original distance from center to handle
+                    const originalDx = initialEntityData.startX - initialEntityData.centerX;
+                    const originalDy = initialEntityData.startY - initialEntityData.centerY;
+                    
+                    const ratioX = originalDx !== 0 ? dx / originalDx : 1;
+                    const ratioY = originalDy !== 0 ? dy / originalDy : 1;
+                    
+                    ent.width = Math.max(5, Math.min(150, initialEntityData.width * ratioX));
+                    ent.height = Math.max(5, Math.min(150, (initialEntityData.height || 30) * ratioY));
+                    setKeyframe(draggingEntity, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                    renderStage();
+                }
+                else if (dragMode === 'rotate') {
+                    const angle = Math.atan2(e.clientY - initialEntityData.centerY, e.clientX - initialEntityData.centerX) * 180 / Math.PI;
+                    const startAngle = Math.atan2(initialEntityData.startY - initialEntityData.centerY, initialEntityData.startX - initialEntityData.centerX) * 180 / Math.PI;
+                    
+                    ent.rotation = (initialEntityData.rotation + (angle - startAngle) + 360) % 360;
+                    setKeyframe(draggingEntity, undefined, undefined, ent.width, ent.height, ent.rotation, ent.opacity);
+                    renderStage();
+                }
+            });
+            
+            const stopDrag = (e) => {
+                if (draggingEntity) {
+                    const target = document.getElementById(draggingEntity);
+                    if (target) target.releasePointerCapture(e.pointerId);
+                    draggingEntity = null;
+                }
+            };
+            
+            stage.addEventListener('pointerup', stopDrag);
+            stage.addEventListener('pointercancel', stopDrag);
+        }
+
+        // --- MODALS & TOOLS ---
+
+        function openAssetModal(category) {
+            closeModals();
+            document.getElementById('asset-modal').classList.add('visible');
+            switchAssetTab(category);
+        }
+
+        function closeModals() {
+            document.querySelectorAll('.modal-overlay').forEach(el => el.classList.remove('visible'));
+        }
+
+        function switchAssetTab(category) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const tabBtn = document.getElementById(`tab-${category}`);
+            if (tabBtn) tabBtn.classList.add('active');
+            
+            const grid = document.getElementById('asset-grid');
+            grid.innerHTML = '';
+            
+            // Set current tab scope
+            grid.dataset.currentTab = category;
+
+            const assets = assetMap[category] || [];
+            
+            if (assets.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'col-span-full py-8 text-center text-sm text-gray-400 font-semibold flex flex-col items-center gap-2';
+                emptyMsg.innerHTML = `
+                    <i data-lucide="folder-open" class="w-8 h-8 text-gray-300"></i>
+                    <span>This library category is empty. Upload your own to start!</span>
+                `;
+                grid.appendChild(emptyMsg);
+                lucide.createIcons();
+                return;
+            }
+
+            assets.forEach(asset => {
+                const el = document.createElement('div');
+                
+                if (category === 'sounds') {
+                    el.className = 'bg-zinc-900 border border-purple-900/30 rounded-xl p-3 flex flex-col justify-between items-stretch gap-2 active:scale-95 transition-transform';
+                    el.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 bg-purple-950/40 rounded-lg flex items-center justify-center text-purple-400">
+                                <i data-lucide="music" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-xs font-bold text-purple-200 truncate flex-1">${asset.label}</span>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <button class="btn-play-sound flex-1 bg-zinc-800 text-purple-300 text-[10px] font-bold py-1.5 rounded-lg active:bg-zinc-700">Play</button>
+                            <button class="btn-add-timeline flex-1 bg-purple-600 text-white text-[10px] font-bold py-1.5 rounded-lg active:bg-purple-700">Add to video</button>
+                        </div>
+                    `;
+
+                    // Sound playback preview button handler
+                    el.querySelector('.btn-play-sound').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const aud = new Audio(asset.value);
+                        aud.volume = 0.8;
+                        aud.play().catch(() => {});
+                    });
+
+                    // Add sound to current timeline position
+                    el.querySelector('.btn-add-timeline').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        closeModals();
+                        window.appState.timelineSounds.push({
+                            id: 'snd_' + Math.random().toString(36).substr(2, 9),
+                            time: window.appState.currentTime,
+                            url: asset.value,
+                            volume: 0.8
+                        });
+                        showToast('Sound added at ' + window.appState.currentTime.toFixed(2) + 's');
+                        drawKeyframeMarkers();
+                        renderSoundTimelineUI();
+                    });
+                } else {
+                    el.className = `asset-item ${category === 'backgrounds' ? 'cover' : 'contain'}`;
+                    el.innerHTML = `
+                        <img src="${asset.value}" alt="${asset.label}" loading="lazy">
+                        <div class="asset-item-label">${asset.label}</div>
+                    `;
+                    el.addEventListener('click', () => {
+                        closeModals();
+                        if (category === 'backgrounds') {
+                            setBackground(asset.value);
+                        } else {
+                            addEntity('image', asset.value, 50, 50, category === 'items' ? 15 : 25, category === 'items' ? 15 : 25);
+                        }
+                    });
+                }
+                grid.appendChild(el);
+            });
+            lucide.createIcons();
+        }
+
+        // Timeline sound controls renderer
+        function renderSoundTimelineUI() {
+            const panel = document.getElementById('sound-timeline-panel');
+            const container = document.getElementById('sound-timeline-items');
+            if (!panel || !container) return;
+
+            const sounds = window.appState.timelineSounds;
+            if (sounds.length === 0) {
+                panel.classList.add('hidden');
+                panel.classList.remove('flex');
+                return;
+            }
+
+            panel.classList.remove('hidden');
+            panel.classList.add('flex');
+            container.innerHTML = '';
+
+            sounds.forEach((sound, index) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between gap-3 bg-zinc-900/70 border border-purple-950/40 p-2 rounded-lg text-xs';
+                
+                // Get display name
+                const matchedAsset = assetMap.sounds.find(s => s.value === sound.url);
+                const soundName = matchedAsset ? matchedAsset.label : 'Custom Sound';
+
+                row.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-purple-200 truncate">${soundName}</div>
+                        <div class="text-[10px] text-purple-400/80 flex items-center gap-2">
+                            <span>Trigger Time:</span>
+                            <input type="number" step="0.1" min="0" max="${window.appState.duration}" value="${sound.time.toFixed(1)}" class="w-12 bg-zinc-950 text-purple-300 border border-purple-900/30 text-center rounded px-1 font-mono text-[10px] sound-time-input">
+                            <span>s</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <div class="flex items-center gap-1">
+                            <i data-lucide="volume-2" class="w-3.5 h-3.5 text-purple-400"></i>
+                            <input type="range" min="0" max="1" step="0.1" value="${sound.volume !== undefined ? sound.volume : 0.8}" class="w-16 accent-purple-600 sound-volume-slider">
+                        </div>
+                        <button class="sound-preview-btn p-1 bg-zinc-800 text-purple-300 rounded active:scale-90"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>
+                        <button class="sound-delete-btn p-1 bg-red-950/30 text-red-400 rounded border border-red-900/30 active:scale-90"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                `;
+
+                // Handle changes
+                const timeInput = row.querySelector('.sound-time-input');
+                timeInput.addEventListener('change', (e) => {
+                    const newTime = Math.max(0, Math.min(window.appState.duration, parseFloat(e.target.value) || 0));
+                    sound.time = newTime;
+                    renderSoundTimelineUI();
+                    drawKeyframeMarkers();
+                });
+
+                const volSlider = row.querySelector('.sound-volume-slider');
+                volSlider.addEventListener('input', (e) => {
+                    sound.volume = parseFloat(e.target.value);
+                });
+
+                row.querySelector('.sound-preview-btn').addEventListener('click', () => {
+                    const aud = new Audio(sound.url);
+                    aud.volume = sound.volume !== undefined ? sound.volume : 0.8;
+                    aud.play().catch(() => {});
+                });
+
+                row.querySelector('.sound-delete-btn').addEventListener('click', () => {
+                    window.appState.timelineSounds.splice(index, 1);
+                    renderSoundTimelineUI();
+                    drawKeyframeMarkers();
+                });
+
+                container.appendChild(row);
+            });
+            lucide.createIcons();
+        }
+
+        function clearAllTimelineSounds() {
+            window.appState.timelineSounds = [];
+            renderSoundTimelineUI();
+            drawKeyframeMarkers();
+        }
+
+        function addTextBubble() {
+            const ent = window.appState.entities.find(e => e.id === window.appState.selectedEntityId);
+            if (ent && ent.type === 'text') {
+                // Edit existing
+                document.getElementById('text-input').value = ent.content;
+                document.getElementById('text-input').dataset.editId = ent.id;
+            } else {
+                // New
+                document.getElementById('text-input').value = '';
+                document.getElementById('text-input').dataset.editId = '';
+            }
+            document.getElementById('text-edit-modal').classList.add('visible');
+        }
+
+        function saveTextEdit() {
+            const val = document.getElementById('text-input').value.trim();
+            const editId = document.getElementById('text-input').dataset.editId;
+            
+            closeModals();
+            if (!val) return;
+
+            if (editId) {
+                const ent = window.appState.entities.find(e => e.id === editId);
+                if (ent) ent.content = val;
+                const el = document.getElementById(editId);
+                if (el) el.textContent = val;
+            } else {
+                addEntity('text', val, 50, 50);
+            }
+        }
+
+        // Settings Modal Open helper
+        function openSettingsModal() {
+            closeModals();
+            document.getElementById('settings-modal').classList.add('visible');
+            const setDur = document.getElementById('settings-duration');
+            if (setDur) {
+                setDur.value = window.appState.duration;
+                document.getElementById('settings-duration-label').textContent = window.appState.duration + 's';
+            }
+        }
+
+        // Toast feedback notifier helper
+        function showToast(message) {
+            const toast = document.getElementById('copy-toast');
+            document.getElementById('toast-message').textContent = message;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        // Copy Game HTML code utility
+        function copyProjectHTML() {
+            // Close modals first on current workspace
+            closeModals();
+
+            // Parse document text to clean it up in memory
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(document.documentElement.outerHTML, 'text/html');
+            
+            // Remove the dev tools section completely
+            const devSection = doc.getElementById('dev-tools-section');
+            if (devSection) {
+                devSection.remove();
+            }
+
+            // Remove selected classes and make sure overlays are hidden
+            doc.querySelectorAll('.modal-overlay').forEach(el => {
+                el.classList.remove('visible');
+                el.style.visibility = 'hidden';
+                el.style.opacity = '0';
+                el.style.pointerEvents = 'none';
+            });
+            doc.querySelectorAll('.stage-entity').forEach(el => {
+                el.classList.remove('selected');
+            });
+            const selectionControls = doc.getElementById('selection-controls');
+            if (selectionControls) {
+                selectionControls.classList.add('hidden');
+                selectionControls.classList.remove('flex');
+            }
+
+            // Prepare clean state to embed
+            const cleanState = JSON.parse(JSON.stringify(window.appState));
+            cleanState.currentTime = 0;
+            cleanState.playing = false;
+            cleanState.selectedEntityId = null;
+
+            // Serialize and replace appState inside target scripts
+            const scripts = doc.querySelectorAll('script');
+            scripts.forEach(script => {
+                if (script.textContent.includes('window.appState = {')) {
+                    const text = script.textContent;
+                    const startIdx = text.indexOf('window.appState = {');
+                    if (startIdx !== -1) {
+                        let braceCount = 0;
+                        let endIdx = -1;
+                        for (let i = startIdx + 'window.appState = '.length; i < text.length; i++) {
+                            if (text[i] === '{') braceCount++;
+                            if (text[i] === '}') {
+                                braceCount--;
+                                if (braceCount === 0) {
+                                    endIdx = i;
+                                    break;
+                                }
+                            }
+                        }
+                        if (endIdx !== -1) {
+                            const oldBlock = text.substring(startIdx, endIdx + 2);
+                            const newBlock = `window.appState = ${JSON.stringify(cleanState, null, 2)};`;
+                            script.textContent = text.replace(oldBlock, newBlock);
+                        }
+                    }
+                }
+            });
+
+            // Get cleaned HTML string
+            const htmlCode = doc.documentElement.outerHTML;
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(htmlCode).then(() => {
+                    showToast('Game HTML Copied to Clipboard!');
+                }).catch(() => {
+                    fallbackCopyHTML(htmlCode);
+                });
+            } else {
+                fallbackCopyHTML(htmlCode);
+            }
+        }
+
+        function fallbackCopyHTML(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('Game HTML Copied to Clipboard (Fallback)!');
+            } catch (err) {
+                alert('Could not copy HTML.');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // Custom Asset Upload Handler Trigger
+        function triggerCustomUpload() {
+            const input = document.getElementById('hidden-input');
+            const currentTab = document.getElementById('asset-grid').dataset.currentTab || 'characters';
+            
+            // Adjust input accept type dynamically
+            if (currentTab === 'sounds') {
+                input.accept = "audio/*, .mp3, .wav, .m4a, .ogg, application/octet-stream";
+            } else {
+                input.accept = "image/*";
+            }
+            input.click();
+        }
+
+        // Process File Input upload
+        function handleFileInput(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const currentTab = document.getElementById('asset-grid').dataset.currentTab || 'characters';
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const dataUrl = event.target.result;
+                const uniqueId = 'cust_' + Date.now();
+                const label = file.name.substring(0, 10) + '...';
+
+                if (currentTab === 'sounds') {
+                    const customSound = {
+                        id: uniqueId,
+                        label: file.name.substring(0, 12) + '...',
+                        value: dataUrl
+                    };
+                    window.appState.customAssets.sounds.push(customSound);
+                    showToast('Custom sound added to Library!');
+                } else {
+                    const customImg = {
+                        id: uniqueId,
+                        type: 'image',
+                        value: dataUrl,
+                        description: file.name + ' user uploaded'
+                    };
+                    
+                    if (currentTab === 'backgrounds') {
+                        window.appState.customAssets.backgrounds.push(customImg);
+                    } else if (currentTab === 'items') {
+                        window.appState.customAssets.items.push(customImg);
+                    } else {
+                        window.appState.customAssets.characters.push(customImg);
+                    }
+                    showToast('Custom asset added to Library!');
+                }
+                
+                // Reinitialize assets map
+                applyAllEditableValues();
+                // Refresh visual tab list
+                switchAssetTab(currentTab);
+            };
+
+            reader.readAsDataURL(file);
+            // Reset input so upload can be triggered again with same file if needed
+            e.target.value = '';
+        }
+
+        // Share handler removed as requested
+
+        // PREVIEW EDITING API
+        (function setupPreviewEditingAPI() {
+            window.addEventListener('message', (event) => {
+                const msg = event.data;
+                if (msg?.origin !== 'sekai_gaming_iframe_api') return;
+                switch (msg.type) {
+                    case 'get_editable_metadata':
+                        window.parent.postMessage({ origin: 'sekai_gaming_iframe_api', type: 'receive_editable_metadata', taskId: msg.taskId, data: window.sekaiEditable || {} }, '*');
+                        break;
+                    case 'apply_change':
+                        const success = applySingleChange(msg.data.id, msg.data.value, msg.data.name, msg.data.description);
+                        window.parent.postMessage({ origin: 'sekai_gaming_iframe_api', type: 'receive_apply_change', taskId: msg.taskId, data: { success } }, '*');
+                        break;
+                    case 'get_current_html':
+                        window.parent.postMessage({ origin: 'sekai_gaming_iframe_api', type: 'receive_current_html', taskId: msg.taskId, data: { html: document.documentElement.outerHTML } }, '*');
+                        break;
+                    case 'reset_changes':
+                        location.reload();
+                        break;
+                }
+            });
+
+            function applySingleChange(id, value, name, description) {
+                const categories = ['tune', 'images', 'videos', 'music', 'sfx', 'colors', 'text', 'prompts', 'voices'];
+                for (const cat of categories) {
+                    const item = window.sekaiEditable[cat]?.find(i => i.id === id);
+                    if (!item) continue;
+                    item.value = value;
+                    if (name) item.name = name;
+                    if (description) item.description = description;
+
+                    if (item.cssVar) {
+                        document.documentElement.style.setProperty(item.cssVar, value);
+                    } else if (item.path) {
+                        setNestedValue(window, item.path, value);
+                    } else if (item.selector) {
+                        const el = document.querySelector(item.selector);
+                        if (!el) return false;
+                        if (el.tagName === 'AUDIO') {
+                            const wasPlaying = !el.paused;
+                            el.src = value;
+                            el.load();
+                            if (wasPlaying) el.play().catch(() => {});
+                        } else if (el.tagName === 'VIDEO') {
+                            el.src = value;
+                            el.load();
+                        } else if (item.property === 'src') {
+                            el.src = value;
+                        } else if (item.property === 'backgroundImage') {
+                            el.style.backgroundImage = `url('${value}')`;
+                        } else if (item.property === 'placeholder') {
+                            el.placeholder = value;
+                        } else {
+                            el.textContent = value;
+                        }
+                    }
+                    // Re-process image lists for modals
+                    applyAllEditableValues(); 
+                    return true;
+                }
+                return false;
+            }
+        })();
+
+        // BOOT
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+
+</body></html>
