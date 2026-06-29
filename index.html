@@ -1271,7 +1271,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>David's Animation Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@latest"></script><style>
+    * {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      touch-action: manipulation !important;
+      -webkit-tap-highlight-color: transparent !important;
+    }
+
+    /* Additional iOS magnifier prevention for text elements */
+    input, textarea, [contenteditable] {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+    }
+
+    /* Prevent long-press magnifier on canvas (common in games) */
+    canvas {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      touch-action: manipulation !important;
+    }
+  </style>
     <script type="module">
         import { snapdom } from 'https://cdn.jsdelivr.net/npm/@zumer/snapdom@2.0.2/+esm';
         window.snapdom = snapdom;
@@ -1580,6 +1603,34 @@
 
         button:disabled { opacity: 0.3; pointer-events: none; }
 
+        /* Rigging & Joint handles */
+        .joint-handle {
+            position: absolute;
+            width: 48px;
+            height: 48px;
+            background: rgba(0, 255, 65, 0.001);
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            z-index: 120;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .stage-entity.selected .joint-handle {
+            display: flex;
+        }
+        .joint-handle::after {
+            content: '';
+            width: 5px;
+            height: 5px;
+            background: #000;
+            border: 1px solid var(--primary);
+            box-shadow: 0 0 3px var(--primary);
+        }
+        .joint-handle:active::after {
+            background: var(--primary);
+        }
+
         /* Hacker aesthetic overrides for sliders, color pickers, and scrollbars */
         input[type="range"] {
             -webkit-appearance: none;
@@ -1627,31 +1678,8 @@
             box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
         }
     </style>
-<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-x-0{left:0px;right:0px}.bottom-0{bottom:0px}.left-0{left:0px}.left-1\/2{left:50%}.top-0{top:0px}.top-1\/2{top:50%}.top-4{top:1rem}.z-20{z-index:20}.z-\[100\]{z-index:100}.z-\[5\]{z-index:5}.-ml-2\.5{margin-left:-0.625rem}.mb-0\.5{margin-bottom:0.125rem}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.ml-0\.5{margin-left:0.125rem}.block{display:block}.flex{display:flex}.hidden{display:none}.\!h-8{height:2rem !important}.h-1{height:0.25rem}.h-1\.5{height:0.375rem}.h-11{height:2.75rem}.h-12{height:3rem}.h-2\.5{height:0.625rem}.h-3{height:0.75rem}.h-3\.5{height:0.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.h-8{height:2rem}.h-\[90\%\]{height:90%}.max-h-32{max-height:8rem}.max-h-\[80\%\]{max-height:80%}.min-h-\[100px\]{min-height:100px}.w-10{width:2.5rem}.w-11{width:2.75rem}.w-16{width:4rem}.w-2\.5{width:0.625rem}.w-3{width:0.75rem}.w-3\.5{width:0.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-8{width:2rem}.w-full{width:100%}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.-translate-x-1\/2{--tw-translate-x:-50%;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-y-1\/2{--tw-translate-y:-50%;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-grab{cursor:grab}.cursor-pointer{cursor:pointer}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.justify-around{justify-content:space-around}.gap-0\.5{gap:0.125rem}.gap-1{gap:0.25rem}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.gap-6{gap:1.5rem}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.whitespace-nowrap{white-space:nowrap}.rounded-full{border-radius:9999px}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-t{border-top-width:1px}.border-none{border-style:none}.\!border-\[\#003b00\]{--tw-border-opacity:1 !important;border-color:rgb(0 59 0 / var(--tw-border-opacity, 1)) !important}.\!border-\[\#00ff41\]{--tw-border-opacity:1 !important;border-color:rgb(0 255 65 / var(--tw-border-opacity, 1)) !important}.border-\[\#003b00\]{--tw-border-opacity:1;border-color:rgb(0 59 0 / var(--tw-border-opacity, 1))}.border-\[\#00ff41\]{--tw-border-opacity:1;border-color:rgb(0 255 65 / var(--tw-border-opacity, 1))}.border-black{--tw-border-opacity:1;border-color:rgb(0 0 0 / var(--tw-border-opacity, 1))}.border-red-900{--tw-border-opacity:1;border-color:rgb(127 29 29 / var(--tw-border-opacity, 1))}.border-red-900\/40{border-color:rgb(127 29 29 / 0.4)}.bg-\[\#001100\]{--tw-bg-opacity:1;background-color:rgb(0 17 0 / var(--tw-bg-opacity, 1))}.bg-\[\#00ff41\]{--tw-bg-opacity:1;background-color:rgb(0 255 65 / var(--tw-bg-opacity, 1))}.bg-\[\#050505\]{--tw-bg-opacity:1;background-color:rgb(5 5 5 / var(--tw-bg-opacity, 1))}.bg-black{--tw-bg-opacity:1;background-color:rgb(0 0 0 / var(--tw-bg-opacity, 1))}.bg-gray-900\/90{background-color:rgb(17 24 39 / 0.9)}.bg-red-950{--tw-bg-opacity:1;background-color:rgb(69 10 10 / var(--tw-bg-opacity, 1))}.bg-red-950\/30{background-color:rgb(69 10 10 / 0.3)}.p-1{padding:0.25rem}.p-2{padding:0.5rem}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-1\.5{padding-left:0.375rem;padding-right:0.375rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}.py-1{padding-top:0.25rem;padding-bottom:0.25rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.pb-0\.5{padding-bottom:0.125rem}.pb-3{padding-bottom:0.75rem}.pb-8{padding-bottom:2rem}.pt-1\.5{padding-top:0.375rem}.pt-2{padding-top:0.5rem}.pt-4{padding-top:1rem}.text-right{text-align:right}.font-mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}.text-\[10px\]{font-size:10px}.text-\[8px\]{font-size:8px}.text-\[9px\]{font-size:9px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.tracking-tighter{letter-spacing:-0.05em}.tracking-wider{letter-spacing:0.05em}.tracking-widest{letter-spacing:0.1em}.text-\[\#008f11\]{--tw-text-opacity:1;color:rgb(0 143 17 / var(--tw-text-opacity, 1))}.text-\[\#00ff41\]{--tw-text-opacity:1;color:rgb(0 255 65 / var(--tw-text-opacity, 1))}.text-black{--tw-text-opacity:1;color:rgb(0 0 0 / var(--tw-text-opacity, 1))}.text-green-400{--tw-text-opacity:1;color:rgb(74 222 128 / var(--tw-text-opacity, 1))}.text-red-400{--tw-text-opacity:1;color:rgb(248 113 113 / var(--tw-text-opacity, 1))}.text-red-500{--tw-text-opacity:1;color:rgb(239 68 68 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.accent-\[\#00ff41\]{accent-color:#00ff41}.opacity-0{opacity:0}.shadow-lg{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.outline-none{outline:2px solid transparent;outline-offset:2px}.transition-colors{transition-property:color, background-color, border-color, fill, stroke, -webkit-text-decoration-color;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, -webkit-text-decoration-color;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.transition-opacity{transition-property:opacity;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.duration-300{transition-duration:300ms}.active\:scale-95:active{--tw-scale-x:.95;--tw-scale-y:.95;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.active\:cursor-grabbing:active{cursor:grabbing}.active\:bg-\[\#003b00\]:active{--tw-bg-opacity:1;background-color:rgb(0 59 0 / var(--tw-bg-opacity, 1))}.active\:bg-\[\#00ff41\]:active{--tw-bg-opacity:1;background-color:rgb(0 255 65 / var(--tw-bg-opacity, 1))}.active\:bg-black:active{--tw-bg-opacity:1;background-color:rgb(0 0 0 / var(--tw-bg-opacity, 1))}.active\:bg-red-400:active{--tw-bg-opacity:1;background-color:rgb(248 113 113 / var(--tw-bg-opacity, 1))}.active\:bg-red-900:active{--tw-bg-opacity:1;background-color:rgb(127 29 29 / var(--tw-bg-opacity, 1))}.active\:text-\[\#00ff41\]:active{--tw-text-opacity:1;color:rgb(0 255 65 / var(--tw-text-opacity, 1))}.active\:text-black:active{--tw-text-opacity:1;color:rgb(0 0 0 / var(--tw-text-opacity, 1))}.active\:text-white:active{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}</style><style>
-    * {
-      -webkit-touch-callout: none !important;
-      -webkit-user-select: none !important;
-      user-select: none !important;
-      touch-action: manipulation !important;
-      -webkit-tap-highlight-color: transparent !important;
-    }
-
-    /* Additional iOS magnifier prevention for text elements */
-    input, textarea, [contenteditable] {
-      -webkit-touch-callout: none !important;
-      -webkit-user-select: none !important;
-      user-select: none !important;
-    }
-
-    /* Prevent long-press magnifier on canvas (common in games) */
-    canvas {
-      -webkit-touch-callout: none !important;
-      -webkit-user-select: none !important;
-      user-select: none !important;
-      touch-action: manipulation !important;
-    }
-  </style></head>
-<body style="-webkit-user-select: none; height: 100%; overscroll-behavior: contain; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;">
+<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-0{inset:0px}.inset-x-0{left:0px;right:0px}.bottom-0{bottom:0px}.left-0{left:0px}.left-1\/2{left:50%}.top-0{top:0px}.top-1\/2{top:50%}.top-4{top:1rem}.z-20{z-index:20}.z-\[100\]{z-index:100}.z-\[5\]{z-index:5}.-ml-2\.5{margin-left:-0.625rem}.mb-0\.5{margin-bottom:0.125rem}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.ml-0\.5{margin-left:0.125rem}.block{display:block}.flex{display:flex}.grid{display:grid}.hidden{display:none}.\!h-8{height:2rem !important}.h-1{height:0.25rem}.h-1\.5{height:0.375rem}.h-11{height:2.75rem}.h-12{height:3rem}.h-2\.5{height:0.625rem}.h-3{height:0.75rem}.h-3\.5{height:0.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-6{height:1.5rem}.h-8{height:2rem}.h-\[90\%\]{height:90%}.h-full{height:100%}.max-h-32{max-height:8rem}.max-h-\[140px\]{max-height:140px}.max-h-\[80\%\]{max-height:80%}.max-h-full{max-height:100%}.min-h-\[100px\]{min-height:100px}.w-10{width:2.5rem}.w-11{width:2.75rem}.w-16{width:4rem}.w-2\.5{width:0.625rem}.w-3{width:0.75rem}.w-3\.5{width:0.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-8{width:2rem}.w-full{width:100%}.max-w-\[120px\]{max-width:120px}.max-w-full{max-width:100%}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.-translate-x-1\/2{--tw-translate-x:-50%;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-y-1\/2{--tw-translate-y:-50%;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-crosshair{cursor:crosshair}.cursor-grab{cursor:grab}.cursor-pointer{cursor:pointer}.grid-cols-3{grid-template-columns:repeat(3, minmax(0, 1fr))}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.justify-around{justify-content:space-around}.gap-0\.5{gap:0.125rem}.gap-1{gap:0.25rem}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.gap-6{gap:1.5rem}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.whitespace-nowrap{white-space:nowrap}.rounded-full{border-radius:9999px}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-t{border-top-width:1px}.border-none{border-style:none}.\!border-\[\#003b00\]{--tw-border-opacity:1 !important;border-color:rgb(0 59 0 / var(--tw-border-opacity, 1)) !important}.\!border-\[\#00ff41\]{--tw-border-opacity:1 !important;border-color:rgb(0 255 65 / var(--tw-border-opacity, 1)) !important}.border-\[\#003b00\]{--tw-border-opacity:1;border-color:rgb(0 59 0 / var(--tw-border-opacity, 1))}.border-\[\#00ff41\]{--tw-border-opacity:1;border-color:rgb(0 255 65 / var(--tw-border-opacity, 1))}.border-black{--tw-border-opacity:1;border-color:rgb(0 0 0 / var(--tw-border-opacity, 1))}.border-red-900{--tw-border-opacity:1;border-color:rgb(127 29 29 / var(--tw-border-opacity, 1))}.border-red-900\/40{border-color:rgb(127 29 29 / 0.4)}.bg-\[\#001100\]{--tw-bg-opacity:1;background-color:rgb(0 17 0 / var(--tw-bg-opacity, 1))}.bg-\[\#00ff41\]{--tw-bg-opacity:1;background-color:rgb(0 255 65 / var(--tw-bg-opacity, 1))}.bg-\[\#050505\]{--tw-bg-opacity:1;background-color:rgb(5 5 5 / var(--tw-bg-opacity, 1))}.bg-black{--tw-bg-opacity:1;background-color:rgb(0 0 0 / var(--tw-bg-opacity, 1))}.bg-gray-900\/90{background-color:rgb(17 24 39 / 0.9)}.bg-red-950{--tw-bg-opacity:1;background-color:rgb(69 10 10 / var(--tw-bg-opacity, 1))}.bg-red-950\/30{background-color:rgb(69 10 10 / 0.3)}.object-contain{object-fit:contain}.p-0\.5{padding:0.125rem}.p-1{padding:0.25rem}.p-2{padding:0.5rem}.p-3{padding:0.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-1\.5{padding-left:0.375rem;padding-right:0.375rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}.py-1{padding-top:0.25rem;padding-bottom:0.25rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.pb-0\.5{padding-bottom:0.125rem}.pb-3{padding-bottom:0.75rem}.pb-8{padding-bottom:2rem}.pt-1\.5{padding-top:0.375rem}.pt-2{padding-top:0.5rem}.pt-4{padding-top:1rem}.text-right{text-align:right}.font-mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}.text-\[10px\]{font-size:10px}.text-\[8px\]{font-size:8px}.text-\[9px\]{font-size:9px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.tracking-tighter{letter-spacing:-0.05em}.tracking-wider{letter-spacing:0.05em}.tracking-widest{letter-spacing:0.1em}.text-\[\#008f11\]{--tw-text-opacity:1;color:rgb(0 143 17 / var(--tw-text-opacity, 1))}.text-\[\#00ff41\]{--tw-text-opacity:1;color:rgb(0 255 65 / var(--tw-text-opacity, 1))}.text-black{--tw-text-opacity:1;color:rgb(0 0 0 / var(--tw-text-opacity, 1))}.text-green-400{--tw-text-opacity:1;color:rgb(74 222 128 / var(--tw-text-opacity, 1))}.text-red-400{--tw-text-opacity:1;color:rgb(248 113 113 / var(--tw-text-opacity, 1))}.text-red-500{--tw-text-opacity:1;color:rgb(239 68 68 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.accent-\[\#00ff41\]{accent-color:#00ff41}.opacity-0{opacity:0}.shadow-lg{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.outline-none{outline:2px solid transparent;outline-offset:2px}.transition-colors{transition-property:color, background-color, border-color, fill, stroke, -webkit-text-decoration-color;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, -webkit-text-decoration-color;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.transition-opacity{transition-property:opacity;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.duration-300{transition-duration:300ms}.active\:scale-95:active{--tw-scale-x:.95;--tw-scale-y:.95;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.active\:cursor-grabbing:active{cursor:grabbing}.active\:bg-\[\#001100\]:active{--tw-bg-opacity:1;background-color:rgb(0 17 0 / var(--tw-bg-opacity, 1))}.active\:bg-\[\#003b00\]:active{--tw-bg-opacity:1;background-color:rgb(0 59 0 / var(--tw-bg-opacity, 1))}.active\:bg-\[\#00ff41\]:active{--tw-bg-opacity:1;background-color:rgb(0 255 65 / var(--tw-bg-opacity, 1))}.active\:bg-black:active{--tw-bg-opacity:1;background-color:rgb(0 0 0 / var(--tw-bg-opacity, 1))}.active\:bg-red-400:active{--tw-bg-opacity:1;background-color:rgb(248 113 113 / var(--tw-bg-opacity, 1))}.active\:bg-red-900:active{--tw-bg-opacity:1;background-color:rgb(127 29 29 / var(--tw-bg-opacity, 1))}.active\:text-\[\#00ff41\]:active{--tw-text-opacity:1;color:rgb(0 255 65 / var(--tw-text-opacity, 1))}.active\:text-black:active{--tw-text-opacity:1;color:rgb(0 0 0 / var(--tw-text-opacity, 1))}.active\:text-white:active{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}</style></head>
+<body>
 
     <!-- Hidden Audio Elements -->
     <audio id="music-bgm" loop=""></audio>
@@ -1717,7 +1745,7 @@
             </div>
 
             <!-- Selection Controls -->
-            <div id="selection-controls" class="px-3 py-2 border-t border-[#003b00] hidden bg-black flex-col gap-2">
+            <div id="selection-controls" class="px-3 py-2 border-t border-[#003b00] hidden bg-black flex-col gap-2 max-h-[140px] overflow-y-auto" style="touch-action: pan-y !important;">
                 <!-- Width and Height/Length Sliders -->
                 <div class="flex flex-col gap-1.5 px-2">
                     <div class="flex items-center justify-between gap-4">
@@ -1767,6 +1795,27 @@
                         </div>
                         <span id="control-opacity-label" class="font-mono text-xs text-[#00ff41] w-10 text-right">100%</span>
                     </div>
+                    <!-- Pivot and Parenting Rigging Tools -->
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-[9px] font-bold text-[#00ff41] uppercase w-16">PARENT:</span>
+                        <select id="control-kf-parent" class="flex-1 bg-black border border-[#003b00] text-[10px] text-[#00ff41] p-1 outline-none">
+                            <option value="">(NONE)</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <span class="text-[9px] font-bold text-[#00ff41] uppercase w-16">PIVOT:</span>
+                        <div class="flex-1 grid grid-cols-3 gap-1 max-w-[120px]">
+                            <button onclick="setAnchor(0, 0)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Top-Left">TL</button>
+                            <button onclick="setAnchor(0.5, 0)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Top-Center">TC</button>
+                            <button onclick="setAnchor(1, 0)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Top-Right">TR</button>
+                            <button onclick="setAnchor(0, 0.5)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Mid-Left">ML</button>
+                            <button onclick="setAnchor(0.5, 0.5)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Center">C</button>
+                            <button onclick="setAnchor(1, 0.5)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Mid-Right">MR</button>
+                            <button onclick="setAnchor(0, 1)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Bottom-Left">BL</button>
+                            <button onclick="setAnchor(0.5, 1)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Bottom-Center">BC</button>
+                            <button onclick="setAnchor(1, 1)" class="btn-pivot-dot border border-[#003b00] text-[#00ff41] text-[8px] p-0.5 active:bg-[#00ff41]" title="Bottom-Right">BR</button>
+                        </div>
+                    </div>
                     <div class="flex items-center justify-between gap-4">
                         <span class="text-[9px] font-bold text-[#00ff41] uppercase w-16">TWEEN:</span>
                         <select id="control-kf-easing" class="flex-1 bg-black border border-[#003b00] text-[10px] text-[#00ff41] p-1 outline-none">
@@ -1776,6 +1825,10 @@
                             <option value="bounce">BOUNCE</option>
                         </select>
                         <button onclick="deleteCurrentKeyframe()" class="bg-red-950 text-red-400 border border-red-900 px-1 text-[8px] font-bold uppercase active:bg-red-400 active:text-black h-6">DEL_KF</button>
+                    </div>
+                    <div id="rig-row" class="flex items-center justify-between gap-4 hidden">
+                        <span class="text-[9px] font-bold text-[#00ff41] uppercase w-16">RIG:</span>
+                        <button onclick="openRigEditor()" class="flex-1 border border-[#00ff41] text-[#00ff41] text-[10px] font-bold py-1 active:bg-[#00ff41] active:text-black uppercase">Setup Skeleton</button>
                     </div>
                     <div class="flex items-center justify-between gap-4">
                         <span class="text-[9px] font-bold text-[#00ff41] uppercase w-16">SFX:</span>
@@ -1914,6 +1967,32 @@
                 <div class="flex gap-3">
                     <button onclick="saveCanvasToLibrary('characters')" class="flex-1 btn-sq h-12">Save as Entity</button>
                     <button onclick="saveCanvasToLibrary('backgrounds')" class="flex-1 btn-sq h-12">Save as Scene</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rigging Modal -->
+    <div id="rig-modal" class="modal-overlay">
+        <div class="modal-content !border-[#00ff41] h-[90%]">
+            <div class="flex justify-between items-center p-4 border-b border-[#003b00] bg-black">
+                <h2 class="font-bold text-lg text-[#00ff41] tracking-widest uppercase">Image_Rigger.exe</h2>
+                <div class="flex gap-2">
+                    <button onclick="clearRigJoints()" class="p-2 border border-red-900 text-red-500 text-xs font-bold uppercase active:bg-red-900">Clear</button>
+                    <button onclick="closeModals()" class="p-2 text-[#00ff41]"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="x" aria-hidden="true" class="lucide lucide-x w-5 h-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+                </div>
+            </div>
+            <div class="flex-1 relative p-4 bg-black flex items-center justify-center overflow-hidden">
+                <div id="rig-workspace-container" class="relative border border-[#003b00] max-w-full max-h-full" style="aspect-ratio: 1; min-width: 250px; min-height: 250px;">
+                    <img id="rig-workspace-img" class="w-full h-full object-contain pointer-events-none" src="">
+                    <div id="rig-joints-layer" class="absolute inset-0 cursor-crosshair"></div>
+                </div>
+            </div>
+            <div class="p-4 bg-black border-t border-[#003b00] flex flex-col gap-3">
+                <p class="text-[10px] text-[#008f11] uppercase">Tap image to place joints. Place at least 2 joints (e.g. head, body, hand) to bend/rig.</p>
+                <div class="flex gap-3">
+                    <button onclick="closeModals()" class="flex-1 border border-[#003b00] text-[#00ff41] font-bold py-3 uppercase text-xs active:bg-[#001100]">Cancel</button>
+                    <button onclick="saveImageRig()" class="flex-1 btn-sq h-12 text-xs">Save Rig</button>
                 </div>
             </div>
         </div>
@@ -2120,6 +2199,43 @@
     },
     "timelineSounds": []
 };
+
+        const DEFAULT_JOINTS = {
+            head: {x: 0, y: -35},
+            neck: {x: 0, y: -22},
+            chest: {x: 0, y: -15},
+            pelvis: {x: 0, y: 15},
+            shoulderL: {x: -15, y: -15},
+            elbowL: {x: -30, y: -15},
+            handL: {x: -45, y: -15},
+            shoulderR: {x: 15, y: -15},
+            elbowR: {x: 30, y: -15},
+            handR: {x: 45, y: -15},
+            hipL: {x: -10, y: 15},
+            kneeL: {x: -15, y: 35},
+            footL: {x: -20, y: 55},
+            hipR: {x: 10, y: 15},
+            kneeR: {x: 15, y: 35},
+            footR: {x: 20, y: 55}
+        };
+
+        const BONES = [
+            ['head', 'neck'],
+            ['neck', 'chest'],
+            ['chest', 'pelvis'],
+            ['chest', 'shoulderL'],
+            ['shoulderL', 'elbowL'],
+            ['elbowL', 'handL'],
+            ['chest', 'shoulderR'],
+            ['shoulderR', 'elbowR'],
+            ['elbowR', 'handR'],
+            ['pelvis', 'hipL'],
+            ['hipL', 'kneeL'],
+            ['kneeL', 'footL'],
+            ['pelvis', 'hipR'],
+            ['hipR', 'kneeR'],
+            ['kneeR', 'footR']
+        ];
 
         let assetMap = { characters: [], backgrounds: [], items: [], sounds: [] };
         let widthSliderCtrl, heightSliderCtrl, opacitySliderCtrl;
@@ -2507,7 +2623,7 @@
                     }
                     
                     window.appState.entities.forEach(entity => {
-                        const state = getInterpolatedState(entity, elapsed);
+                        const state = getResolvedEntityState(entity, elapsed);
                         ctx.save();
                         const cx = (state.x / 100) * canvas.width;
                         const cy = (state.y / 100) * canvas.height;
@@ -2518,9 +2634,127 @@
                         ctx.rotate(state.rotation * Math.PI / 180);
                         ctx.scale(entity.flipH ? -1 : 1, entity.flipV ? -1 : 1);
                         ctx.globalAlpha = state.opacity;
+
+                        // Apply pivot offset manually in Canvas
+                        const ax = entity.anchorX ?? 0.5;
+                        const ay = entity.anchorY ?? 0.5;
+                        const offsetX = (0.5 - ax) * ew;
+                        const offsetY = (0.5 - ay) * eh;
                         
                         if (entity.type === 'image' && assetCache[entity.content]) {
-                            ctx.drawImage(assetCache[entity.content], -ew / 2, -eh / 2, ew, eh);
+                            const joints = state.joints || entity.bindJoints;
+                            const bindJoints = entity.bindJoints;
+                            if (entity.isRigged && joints && bindJoints && Object.keys(bindJoints).length > 0) {
+                                const numGrid = 4;
+                                const vertices = [];
+                                const bindVertices = [];
+
+                                for (let r = 0; r < numGrid; r++) {
+                                    for (let c = 0; c < numGrid; c++) {
+                                        const lx = ((c / (numGrid - 1)) - 0.5) * 120;
+                                        const ly = ((r / (numGrid - 1)) - 0.5) * 120;
+                                        
+                                        let totalWeight = 0;
+                                        const weights = {};
+                                        Object.keys(bindJoints).forEach(jId => {
+                                            const bj = bindJoints[jId];
+                                            const distSq = (lx - bj.x) ** 2 + (ly - bj.y) ** 2;
+                                            const weight = 1 / (distSq + 10);
+                                            weights[jId] = weight;
+                                            totalWeight += weight;
+                                        });
+
+                                        let px = lx;
+                                        let py = ly;
+                                        if (totalWeight > 0) {
+                                            let dispX = 0;
+                                            let dispY = 0;
+                                            Object.keys(bindJoints).forEach(jId => {
+                                                const nw = weights[jId] / totalWeight;
+                                                const bj = bindJoints[jId];
+                                                const pj = joints[jId] || bj;
+                                                dispX += nw * (pj.x - bj.x);
+                                                dispY += nw * (pj.y - bj.y);
+                                            });
+                                            px += dispX;
+                                            py += dispY;
+                                        }
+                                        vertices.push({ x: px, y: py });
+                                        bindVertices.push({ x: lx, y: ly });
+                                    }
+                                }
+
+                                const imgW = assetCache[entity.content].naturalWidth;
+                                const imgH = assetCache[entity.content].naturalHeight;
+
+                                for (let r = 0; r < numGrid - 1; r++) {
+                                    for (let c = 0; c < numGrid - 1; c++) {
+                                        const i00 = r * numGrid + c;
+                                        const i10 = (r + 1) * numGrid + c;
+                                        const i01 = r * numGrid + (c + 1);
+                                        const i11 = (r + 1) * numGrid + (c + 1);
+
+                                        const toCanvasLocal = (v) => ({
+                                            x: ((v.x / 120) + 0.5) * ew - ew / 2 + offsetX,
+                                            y: ((v.y / 120) + 0.5) * eh - eh / 2 + offsetY
+                                        });
+
+                                        const toSource = (v) => ({
+                                            x: ((v.x / 120) + 0.5) * imgW,
+                                            y: ((v.y / 120) + 0.5) * imgH
+                                        });
+
+                                        const v00 = toCanvasLocal(vertices[i00]);
+                                        const v10 = toCanvasLocal(vertices[i10]);
+                                        const v01 = toCanvasLocal(vertices[i01]);
+                                        const v11 = toCanvasLocal(vertices[i11]);
+
+                                        const s00 = toSource(bindVertices[i00]);
+                                        const s10 = toSource(bindVertices[i10]);
+                                        const s01 = toSource(bindVertices[i01]);
+                                        const s11 = toSource(bindVertices[i11]);
+
+                                        drawWarpedTriangle(ctx, assetCache[entity.content], 
+                                            v00.x, v00.y, v10.x, v10.y, v01.x, v01.y,
+                                            s00.x, s00.y, s10.x, s10.y, s01.x, s01.y
+                                        );
+
+                                        drawWarpedTriangle(ctx, assetCache[entity.content], 
+                                            v01.x, v01.y, v10.x, v10.y, v11.x, v11.y,
+                                            s01.x, s01.y, s10.x, s10.y, s11.x, s11.y
+                                        );
+                                    }
+                                }
+                            } else {
+                                ctx.drawImage(assetCache[entity.content], -ew / 2 + offsetX, -eh / 2 + offsetY, ew, eh);
+                            }
+                        } else if (entity.type === 'stickman') {
+                            const joints = state.joints || DEFAULT_JOINTS;
+                            BONES.forEach(([j1Name, j2Name]) => {
+                                const j1 = joints[j1Name] || DEFAULT_JOINTS[j1Name];
+                                const j2 = joints[j2Name] || DEFAULT_JOINTS[j2Name];
+                                const x1 = (j1.x / 120) * ew;
+                                const y1 = (j1.y / 120) * eh;
+                                const x2 = (j2.x / 120) * ew;
+                                const y2 = (j2.y / 120) * eh;
+
+                                ctx.beginPath();
+                                ctx.moveTo(x1, y1);
+                                ctx.lineTo(x2, y2);
+                                ctx.strokeStyle = '#00ff41';
+                                ctx.lineWidth = 4;
+                                ctx.stroke();
+                            });
+                            const headJoint = joints.head || DEFAULT_JOINTS.head;
+                            const hx = (headJoint.x / 120) * ew;
+                            const hy = (headJoint.y / 120) * eh;
+                            ctx.beginPath();
+                            ctx.arc(hx, hy, (8 / 120) * ew, 0, Math.PI * 2);
+                            ctx.fillStyle = '#000000';
+                            ctx.strokeStyle = '#00ff41';
+                            ctx.lineWidth = 3;
+                            ctx.fill();
+                            ctx.stroke();
                         } else if (entity.type === 'text') {
                             ctx.fillStyle = '#00ff41';
                             ctx.font = 'bold 36px monospace';
@@ -2538,6 +2772,18 @@
                 btn.innerHTML = originalText;
                 lucide.createIcons();
                 showToast("MP4 Export Failed.");
+            }
+        }
+
+        // Direct Anchor/Pivot rigging offset updater
+        function setAnchor(ax, ay) {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (ent) {
+                ent.anchorX = ax;
+                ent.anchorY = ay;
+                renderStage();
             }
         }
 
@@ -2859,6 +3105,20 @@
                     updateKeyframeEasing(e.target.value);
                 });
             }
+
+            // Selection Parent rig dropdown listener
+            const parentSelect = document.getElementById('control-kf-parent');
+            if (parentSelect) {
+                parentSelect.addEventListener('change', (e) => {
+                    const id = window.appState.selectedEntityId;
+                    if (!id) return;
+                    const ent = window.appState.entities.find(en => en.id === id);
+                    if (ent) {
+                        ent.parentId = e.target.value || null;
+                        renderStage();
+                    }
+                });
+            }
             
             // Stage deselect
             const stageWrapper = document.getElementById('stage-wrapper');
@@ -3053,6 +3313,59 @@
             if (kfEasingSelect) {
                 kfEasingSelect.value = kf?.easing || window.appState.easing || 'easeInOut';
             }
+
+            // Sync Rig row visibility
+            const rigRow = document.getElementById('rig-row');
+            if (rigRow) {
+                if (ent.type === 'image') {
+                    rigRow.classList.remove('hidden');
+                    rigRow.classList.add('flex');
+                } else {
+                    rigRow.classList.add('hidden');
+                    rigRow.classList.remove('flex');
+                }
+            }
+
+            // Sync Parent Rig dropdown
+            const parentSelect = document.getElementById('control-kf-parent');
+            if (parentSelect) {
+                const currentParentVal = ent.parentId || '';
+                parentSelect.innerHTML = '<option value="">(NONE)</option>';
+                window.appState.entities.forEach(otherEnt => {
+                    if (otherEnt.id !== ent.id) {
+                        const opt = document.createElement('option');
+                        opt.value = otherEnt.id;
+                        opt.textContent = otherEnt.type === 'text' ? `Text: ${otherEnt.content.substring(0, 10)}` : `Asset: ${otherEnt.content.substring(otherEnt.content.lastIndexOf('/') + 1, otherEnt.content.lastIndexOf('/') + 12)}`;
+                        parentSelect.appendChild(opt);
+                    }
+                });
+                parentSelect.value = currentParentVal;
+            }
+
+            // Sync Pivot Selection visual highlights
+            const ax = ent.anchorX ?? 0.5;
+            const ay = ent.anchorY ?? 0.5;
+            document.querySelectorAll('.btn-pivot-dot').forEach(btn => {
+                const title = btn.getAttribute('title');
+                let active = false;
+                if (title === 'Top-Left' && ax === 0 && ay === 0) active = true;
+                else if (title === 'Top-Center' && ax === 0.5 && ay === 0) active = true;
+                else if (title === 'Top-Right' && ax === 1 && ay === 0) active = true;
+                else if (title === 'Mid-Left' && ax === 0 && ay === 0.5) active = true;
+                else if (title === 'Center' && ax === 0.5 && ay === 0.5) active = true;
+                else if (title === 'Mid-Right' && ax === 1 && ay === 0.5) active = true;
+                else if (title === 'Bottom-Left' && ax === 0 && ay === 1) active = true;
+                else if (title === 'Bottom-Center' && ax === 0.5 && ay === 1) active = true;
+                else if (title === 'Bottom-Right' && ax === 1 && ay === 1) active = true;
+                
+                if (active) {
+                    btn.classList.add('bg-[#00ff41]', 'text-black');
+                    btn.classList.remove('text-[#00ff41]');
+                } else {
+                    btn.classList.remove('bg-[#00ff41]', 'text-black');
+                    btn.classList.add('text-[#00ff41]');
+                }
+            });
         }
 
         function drawKeyframeMarkers() {
@@ -3081,6 +3394,105 @@
         }
 
         // --- STAGE RENDERING & LOGIC ---
+
+        function setupJointDrag(handle, entity, jointName) {
+            let isDraggingJoint = false;
+            
+            handle.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                isDraggingJoint = true;
+                handle.setPointerCapture(e.pointerId);
+                
+                if (window.appState.playing) togglePlayback();
+                
+                const stage = document.getElementById('stage');
+                const stageRect = stage.getBoundingClientRect();
+                
+                const onPointerMove = (ev) => {
+                    if (!isDraggingJoint) return;
+                    
+                    const currentEntityState = getResolvedEntityState(entity, window.appState.currentTime);
+                    const cx = stageRect.left + (currentEntityState.x / 100) * stageRect.width;
+                    const cy = stageRect.top + (currentEntityState.y / 100) * stageRect.height;
+                    
+                    let dx = ev.clientX - cx;
+                    let dy = ev.clientY - cy;
+                    
+                    // Counter-rotate to get local relative joint coords
+                    const rotationRad = -(currentEntityState.rotation || 0) * Math.PI / 180;
+                    const cos = Math.cos(rotationRad);
+                    const sin = Math.sin(rotationRad);
+                    let rx = dx * cos - dy * sin;
+                    let ry = dx * sin + dy * cos;
+                    
+                    const entityWidthPx = (currentEntityState.width / 100) * stageRect.width;
+                    const entityHeightPx = (currentEntityState.height / 100) * stageRect.height;
+                    
+                    rx = (rx / entityWidthPx) * 120;
+                    ry = (ry / entityHeightPx) * 120;
+                    
+                    // Allow bones/rigs to move outside of their original box bounds
+                    rx = Math.max(-300, Math.min(300, rx));
+                    ry = Math.max(-300, Math.min(300, ry));
+                    
+                    const time = window.appState.currentTime;
+                    const threshold = 0.1;
+                    let kf = entity.keyframes.find(k => Math.abs(k.time - time) < threshold);
+                    if (!kf) {
+                        setKeyframe(entity.id, undefined, undefined, currentEntityState.width, currentEntityState.height, currentEntityState.rotation, currentEntityState.opacity);
+                        kf = entity.keyframes.find(k => Math.abs(k.time - time) < threshold);
+                    }
+                    if (kf) {
+                        const bindJoints = entity.bindJoints || DEFAULT_JOINTS;
+                        if (!kf.joints) {
+                            const lastKf = [...entity.keyframes].reverse().find(k => k.time < time && k.joints);
+                            kf.joints = lastKf ? JSON.parse(JSON.stringify(lastKf.joints)) : JSON.parse(JSON.stringify(bindJoints));
+                        }
+                        kf.joints[jointName] = { x: rx, y: ry };
+                    }
+                    renderStage();
+                };
+                
+                const onPointerUp = (ev) => {
+                    if (isDraggingJoint) {
+                        isDraggingJoint = false;
+                        handle.releasePointerCapture(ev.pointerId);
+                        window.removeEventListener('pointermove', onPointerMove);
+                        window.removeEventListener('pointerup', onPointerUp);
+                    }
+                };
+                
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+            });
+        }
+
+        function drawWarpedTriangle(ctx, img, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.closePath();
+            ctx.clip();
+
+            const delta = u0*v1 + v0*u2 + u1*v2 - v1*u2 - v0*u1 - u0*v2;
+            if (Math.abs(delta) < 0.0001) {
+                ctx.restore();
+                return;
+            }
+
+            const a = (x0*v1 + v0*x2 + x1*v2 - v1*x2 - v0*x1 - x0*v2) / delta;
+            const b = (y0*v1 + v0*y2 + y1*v2 - v1*y2 - v0*y1 - y0*v2) / delta;
+            const c = (u0*x1 + x0*u2 + u1*x2 - x1*u2 - x0*u1 - u0*x2) / delta;
+            const d = (u0*y1 + y0*u2 + u1*y2 - y1*u2 - y0*u1 - u0*y2) / delta;
+            const e = (u0*v1*x2 + v0*u2*x1 + u1*v2*x0 - v1*u2*x0 - v0*u1*x2 - u0*v2*x1) / delta;
+            const f = (u0*v1*y2 + v0*u2*y1 + u1*v2*y0 - v1*u2*y0 - v0*u1*y2 - u0*v2*y1) / delta;
+
+            ctx.transform(a, b, c, d, e, f);
+            ctx.drawImage(img, 0, 0);
+            ctx.restore();
+        }
 
         function renderStage() {
             const stage = document.getElementById('stage');
@@ -3137,27 +3549,268 @@
                     stage.appendChild(el);
                 }
                 
-                // Interpolate Position, scale/width, height, rotation, and opacity
-                const state = getInterpolatedState(entity, time);
+                // Interpolate absolute coordinates and transforms via hierarchy
+                const state = getResolvedEntityState(entity, time);
                 el.style.left = `${state.x}%`;
                 el.style.top = `${state.y}%`;
                 
-                // Apply Width, Height & Transform (Scale, Rotate, Flip Horizontal/Vertical)
+                // Apply Width, Height, Custom Anchor & Transform configurations
                 el.style.width = `${state.width}%`;
                 el.style.height = `${state.height}%`;
                 el.style.opacity = state.opacity;
+
+                const anchorX = entity.anchorX ?? 0.5;
+                const anchorY = entity.anchorY ?? 0.5;
+                el.style.transformOrigin = `${anchorX * 100}% ${anchorY * 100}%`;
                 
                 const rot = state.rotation;
                 const fH = entity.flipH ? -1 : 1;
                 const fV = entity.flipV ? -1 : 1;
                 el.style.transform = `translate(-50%, -50%) rotate(${rot}deg) scale(${fH}, ${fV})`;
+
+                // Render dynamic warp mesh for Rigged Images
+                if (entity.type === 'image') {
+                    if (entity.isRigged) {
+                        const img = el.querySelector('img');
+                        if (img) img.style.display = 'none';
+
+                        let canvas = el.querySelector('.rigged-canvas');
+                        if (!canvas) {
+                            canvas = document.createElement('canvas');
+                            canvas.className = 'rigged-canvas';
+                            canvas.style.position = 'absolute';
+                            canvas.style.top = '0';
+                            canvas.style.left = '0';
+                            canvas.style.width = '100%';
+                            canvas.style.height = '100%';
+                            canvas.style.pointerEvents = 'none';
+                            el.appendChild(canvas);
+                        }
+                        canvas.style.display = 'block';
+
+                        const rect = el.getBoundingClientRect();
+                        const w = Math.round(rect.width);
+                        const h = Math.round(rect.height);
+                        if (w > 0 && h > 0) {
+                            if (canvas.width !== w || canvas.height !== h) {
+                                canvas.width = w;
+                                canvas.height = h;
+                            }
+                            
+                            if (!window.imageObjects) window.imageObjects = {};
+                            let cachedImg = window.imageObjects[entity.content];
+                            if (!cachedImg) {
+                                cachedImg = new Image();
+                                cachedImg.crossOrigin = "anonymous";
+                                cachedImg.onload = () => { renderStage(); };
+                                cachedImg.src = entity.content;
+                                window.imageObjects[entity.content] = cachedImg;
+                            }
+
+                            if (cachedImg.complete && cachedImg.naturalWidth > 0) {
+                                const ctx = canvas.getContext('2d');
+                                ctx.clearRect(0, 0, w, h);
+
+                                const joints = state.joints || entity.bindJoints;
+                                const bindJoints = entity.bindJoints;
+
+                                if (joints && bindJoints) {
+                                    const numGrid = 4;
+                                    const vertices = [];
+                                    const bindVertices = [];
+
+                                    for (let r = 0; r < numGrid; r++) {
+                                        for (let c = 0; c < numGrid; c++) {
+                                            const lx = ((c / (numGrid - 1)) - 0.5) * 120;
+                                            const ly = ((r / (numGrid - 1)) - 0.5) * 120;
+                                            
+                                            let totalWeight = 0;
+                                            const weights = {};
+                                            
+                                            Object.keys(bindJoints).forEach(jId => {
+                                                const bj = bindJoints[jId];
+                                                const distSq = (lx - bj.x) ** 2 + (ly - bj.y) ** 2;
+                                                const weight = 1 / (distSq + 10);
+                                                weights[jId] = weight;
+                                                totalWeight += weight;
+                                            });
+
+                                            let px = lx;
+                                            let py = ly;
+                                            
+                                            if (totalWeight > 0) {
+                                                let dispX = 0;
+                                                let dispY = 0;
+                                                Object.keys(bindJoints).forEach(jId => {
+                                                    const nw = weights[jId] / totalWeight;
+                                                    const bj = bindJoints[jId];
+                                                    const pj = joints[jId] || bj;
+                                                    dispX += nw * (pj.x - bj.x);
+                                                    dispY += nw * (pj.y - bj.y);
+                                                });
+                                                px += dispX;
+                                                py += dispY;
+                                            }
+
+                                            vertices.push({ x: px, y: py });
+                                            bindVertices.push({ x: lx, y: ly });
+                                        }
+                                    }
+
+                                    const imgW = cachedImg.naturalWidth;
+                                    const imgH = cachedImg.naturalHeight;
+
+                                    for (let r = 0; r < numGrid - 1; r++) {
+                                        for (let c = 0; c < numGrid - 1; c++) {
+                                            const i00 = r * numGrid + c;
+                                            const i10 = (r + 1) * numGrid + c;
+                                            const i01 = r * numGrid + (c + 1);
+                                            const i11 = (r + 1) * numGrid + (c + 1);
+
+                                            const toCanvas = (v) => ({
+                                                x: ((v.x / 120) + 0.5) * w,
+                                                y: ((v.y / 120) + 0.5) * h
+                                            });
+
+                                            const toSource = (v) => ({
+                                                x: ((v.x / 120) + 0.5) * imgW,
+                                                y: ((v.y / 120) + 0.5) * imgH
+                                            });
+
+                                            const v00 = toCanvas(vertices[i00]);
+                                            const v10 = toCanvas(vertices[i10]);
+                                            const v01 = toCanvas(vertices[i01]);
+                                            const v11 = toCanvas(vertices[i11]);
+
+                                            const s00 = toSource(bindVertices[i00]);
+                                            const s10 = toSource(bindVertices[i10]);
+                                            const s01 = toSource(bindVertices[i01]);
+                                            const s11 = toSource(bindVertices[i11]);
+
+                                            drawWarpedTriangle(ctx, cachedImg, 
+                                                v00.x, v00.y, v10.x, v10.y, v01.x, v01.y,
+                                                s00.x, s00.y, s10.x, s10.y, s01.x, s01.y
+                                            );
+
+                                            drawWarpedTriangle(ctx, cachedImg, 
+                                                v01.x, v01.y, v10.x, v10.y, v11.x, v11.y,
+                                                s01.x, s01.y, s10.x, s10.y, s11.x, s11.y
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        const img = el.querySelector('img');
+                        if (img) img.style.display = 'block';
+                        const canvas = el.querySelector('.rigged-canvas');
+                        if (canvas) canvas.style.display = 'none';
+                    }
+                }
+
+                // Render dynamic SVG bones skeleton for Stickman rig
+                if (entity.type === 'stickman') {
+                    let svg = el.querySelector('svg');
+                    if (!svg) {
+                        svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        svg.setAttribute('viewBox', '-60 -60 120 120');
+                        svg.style.width = '100%';
+                        svg.style.height = '100%';
+                        el.appendChild(svg);
+                    }
+                    svg.innerHTML = '';
+                    const joints = state.joints || DEFAULT_JOINTS;
+
+                    // Render bones skeleton paths
+                    BONES.forEach(([j1Name, j2Name]) => {
+                        const j1 = joints[j1Name] || DEFAULT_JOINTS[j1Name];
+                        const j2 = joints[j2Name] || DEFAULT_JOINTS[j2Name];
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', j1.x);
+                        line.setAttribute('y1', j1.y);
+                        line.setAttribute('x2', j2.x);
+                        line.setAttribute('y2', j2.y);
+                        line.setAttribute('stroke', '#00ff41');
+                        line.setAttribute('stroke-width', '4');
+                        svg.appendChild(line);
+                    });
+
+                    // Render circular head joint
+                    const headJoint = joints.head || DEFAULT_JOINTS.head;
+                    const headCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    headCircle.setAttribute('cx', headJoint.x);
+                    headCircle.setAttribute('cy', headJoint.y);
+                    headCircle.setAttribute('r', '8');
+                    headCircle.setAttribute('fill', '#000');
+                    headCircle.setAttribute('stroke', '#00ff41');
+                    headCircle.setAttribute('stroke-width', '3');
+                    svg.appendChild(headCircle);
+
+                    // Render interactive custom pose joints
+                    Object.keys(DEFAULT_JOINTS).forEach(jointName => {
+                        let handle = el.querySelector(`.joint-handle[data-joint="${jointName}"]`);
+                        if (!handle) {
+                            handle = document.createElement('div');
+                            handle.className = 'joint-handle';
+                            handle.dataset.joint = jointName;
+                            el.appendChild(handle);
+                            setupJointDrag(handle, entity, jointName);
+                        }
+                        const joint = joints[jointName] || DEFAULT_JOINTS[jointName];
+                        const pctX = ((joint.x + 60) / 120) * 100;
+                        const pctY = ((joint.y + 60) / 120) * 100;
+                        handle.style.left = `${pctX}%`;
+                        handle.style.top = `${pctY}%`;
+                        handle.style.display = (entity.id === window.appState.selectedEntityId) ? 'flex' : 'none';
+                    });
+                }
+
+                // Rigged image joint handles display
+                if (entity.type === 'image' && entity.isRigged && state.joints) {
+                    const joints = state.joints;
+                    const bindJoints = entity.bindJoints || {};
+                    const currentJointNames = Object.keys(joints);
+                    
+                    el.querySelectorAll('.joint-handle').forEach(h => {
+                        if (!currentJointNames.includes(h.dataset.joint)) {
+                            h.remove();
+                        }
+                    });
+
+                    currentJointNames.forEach(jointName => {
+                        let handle = el.querySelector(`.joint-handle[data-joint="${jointName}"]`);
+                        if (!handle) {
+                            handle = document.createElement('div');
+                            handle.className = 'joint-handle';
+                            handle.dataset.joint = jointName;
+                            el.appendChild(handle);
+                            setupJointDrag(handle, entity, jointName);
+                        }
+                        const joint = joints[jointName] || bindJoints[jointName];
+                        const pctX = ((joint.x + 60) / 120) * 100;
+                        const pctY = ((joint.y + 60) / 120) * 100;
+                        handle.style.left = `${pctX}%`;
+                        handle.style.top = `${pctY}%`;
+                        handle.style.display = el.classList.contains('selected') ? 'flex' : 'none';
+                    });
+                }
+
+                if (entity.type !== 'stickman' && !entity.isRigged) {
+                    el.querySelectorAll('.joint-handle').forEach(h => h.remove());
+                }
                 
                 if (entity.id === window.appState.selectedEntityId) {
                     el.classList.add('selected');
-                    // Ensure UI sliders are in sync with the current visual state of the selected entity
                     syncSelectionUI();
+                    el.querySelectorAll('.joint-handle').forEach(h => {
+                        h.style.display = 'flex';
+                    });
                 } else {
                     el.classList.remove('selected');
+                    el.querySelectorAll('.joint-handle').forEach(h => {
+                        h.style.display = 'none';
+                    });
                 }
             });
         }
@@ -3190,7 +3843,7 @@
         function getInterpolatedState(entity, time) {
             const kfs = entity.keyframes;
             if (kfs.length === 0) {
-                return { x: 50, y: 50, width: entity.width || 30, height: entity.height || 30, rotation: entity.rotation || 0, opacity: entity.opacity ?? 1 };
+                return { x: 50, y: 50, width: entity.width || 30, height: entity.height || 30, rotation: entity.rotation || 0, opacity: entity.opacity ?? 1, joints: DEFAULT_JOINTS };
             }
             if (kfs.length === 1) {
                 return { 
@@ -3199,7 +3852,8 @@
                     width: kfs[0].width ?? entity.width ?? 30, 
                     height: kfs[0].height ?? entity.height ?? 30, 
                     rotation: kfs[0].rotation ?? entity.rotation ?? 0,
-                    opacity: kfs[0].opacity ?? entity.opacity ?? 1
+                    opacity: kfs[0].opacity ?? entity.opacity ?? 1,
+                    joints: kfs[0].joints || DEFAULT_JOINTS
                 };
             }
             
@@ -3220,7 +3874,8 @@
                     width: k1.width ?? entity.width ?? 30, 
                     height: k1.height ?? entity.height ?? 30, 
                     rotation: k1.rotation ?? entity.rotation ?? 0,
-                    opacity: k1.opacity ?? entity.opacity ?? 1
+                    opacity: k1.opacity ?? entity.opacity ?? 1,
+                    joints: k1.joints || DEFAULT_JOINTS
                 };
             }
             if (time >= k2.time) {
@@ -3230,7 +3885,8 @@
                     width: k2.width ?? entity.width ?? 30, 
                     height: k2.height ?? entity.height ?? 30, 
                     rotation: k2.rotation ?? entity.rotation ?? 0,
-                    opacity: k2.opacity ?? entity.opacity ?? 1
+                    opacity: k2.opacity ?? entity.opacity ?? 1,
+                    joints: k2.joints || DEFAULT_JOINTS
                 };
             }
             
@@ -3246,13 +3902,76 @@
             if (diff < -180) diff += 360;
             const rot = r1 + diff * progress;
 
+            // Interpolate individual stickman or custom joints if available
+            const bindJoints = entity.bindJoints || DEFAULT_JOINTS;
+            const joints1 = k1.joints || bindJoints;
+            const joints2 = k2.joints || bindJoints;
+            const interpolatedJoints = {};
+            
+            const jointKeys = new Set([
+                ...Object.keys(bindJoints),
+                ...Object.keys(joints1),
+                ...Object.keys(joints2)
+            ]);
+
+            jointKeys.forEach(jointName => {
+                const bj = bindJoints[jointName] || { x: 0, y: 0 };
+                const j1 = joints1[jointName] || bj;
+                const j2 = joints2[jointName] || bj;
+                interpolatedJoints[jointName] = {
+                    x: j1.x + (j2.x - j1.x) * progress,
+                    y: j1.y + (j2.y - j1.y) * progress
+                };
+            });
+
             return {
                 x: k1.x + (k2.x - k1.x) * progress,
                 y: k1.y + (k2.y - k1.y) * progress,
                 width: (k1.width ?? entity.width ?? 30) + ((k2.width ?? entity.width ?? 30) - (k1.width ?? entity.width ?? 30)) * progress,
                 height: (k1.height ?? entity.height ?? 30) + ((k2.height ?? entity.height ?? 30) - (k1.height ?? entity.height ?? 30)) * progress,
                 rotation: rot,
-                opacity: (k1.opacity ?? entity.opacity ?? 1) + ((k2.opacity ?? entity.opacity ?? 1) - (k1.opacity ?? entity.opacity ?? 1)) * progress
+                opacity: (k1.opacity ?? entity.opacity ?? 1) + ((k2.opacity ?? entity.opacity ?? 1) - (k1.opacity ?? entity.opacity ?? 1)) * progress,
+                joints: interpolatedJoints
+            };
+        }
+
+        // Resolves absolute coordinates for rendering parent-child rig dependencies
+        function getResolvedEntityState(entity, time, visited = new Set()) {
+            const defaultJointsVal = entity.bindJoints || DEFAULT_JOINTS;
+            if (visited.has(entity.id)) return { x: 50, y: 50, rotation: 0, width: 30, height: 30, opacity: 1, joints: defaultJointsVal };
+            visited.add(entity.id);
+
+            const baseState = getInterpolatedState(entity, time);
+            if (!entity.parentId) {
+                return baseState;
+            }
+
+            const parent = window.appState.entities.find(e => e.id === entity.parentId);
+            if (!parent) {
+                return baseState;
+            }
+
+            const parentState = getResolvedEntityState(parent, time, visited);
+            
+            // Apply parent rotation to relative child offset
+            const rad = (parentState.rotation || 0) * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+
+            const offsetX = baseState.x * (parentState.width / 100);
+            const offsetY = baseState.y * (parentState.height / 100);
+
+            const rx = offsetX * cos - offsetY * sin;
+            const ry = offsetX * sin + offsetY * cos;
+
+            return {
+                x: parentState.x + rx,
+                y: parentState.y + ry,
+                rotation: (parentState.rotation || 0) + (baseState.rotation || 0),
+                width: baseState.width * (parentState.width / 100),
+                height: baseState.height * (parentState.height / 100),
+                opacity: (parentState.opacity ?? 1) * (baseState.opacity ?? 1),
+                joints: baseState.joints
             };
         }
 
@@ -3273,6 +3992,9 @@
             const finalRot = rotation !== undefined ? rotation : currentState.rotation;
             const finalOpacity = opacity !== undefined ? opacity : currentState.opacity;
             const finalEasing = easing !== undefined ? easing : (existingIdx >= 0 ? entity.keyframes[existingIdx].easing : undefined);
+            
+            // Carry over existing joints if any
+            const finalJoints = currentState.joints ? JSON.parse(JSON.stringify(currentState.joints)) : undefined;
 
             if (existingIdx >= 0) {
                 entity.keyframes[existingIdx].x = finalX;
@@ -3281,6 +4003,7 @@
                 entity.keyframes[existingIdx].height = finalHeight;
                 entity.keyframes[existingIdx].rotation = finalRot;
                 entity.keyframes[existingIdx].opacity = finalOpacity;
+                if (finalJoints) entity.keyframes[existingIdx].joints = finalJoints;
                 if (easing !== undefined) entity.keyframes[existingIdx].easing = finalEasing;
             } else {
                 entity.keyframes.push({ 
@@ -3291,6 +4014,7 @@
                     height: finalHeight, 
                     rotation: finalRot, 
                     opacity: finalOpacity,
+                    joints: finalJoints,
                     easing: finalEasing
                 });
                 entity.keyframes.sort((a, b) => a.time - b.time);
@@ -3307,6 +4031,34 @@
                 flipH: false,
                 flipV: false,
                 keyframes: [{ time: window.appState.currentTime, x, y, width, height, rotation: 0, opacity: 1 }]
+            });
+            selectEntity(id);
+            playSfx('pop');
+            renderStage();
+        }
+
+        function addStickmanEntity() {
+            const id = 'ent_stickman_' + Math.random().toString(36).substr(2, 9);
+            window.appState.entities.push({
+                id, 
+                type: 'stickman', 
+                content: 'Stickman Rig', 
+                width: 30, 
+                height: 30,
+                rotation: 0,
+                opacity: 1,
+                flipH: false,
+                flipV: false,
+                keyframes: [{ 
+                    time: window.appState.currentTime, 
+                    x: 50, 
+                    y: 50, 
+                    width: 30, 
+                    height: 30, 
+                    rotation: 0, 
+                    opacity: 1,
+                    joints: JSON.parse(JSON.stringify(DEFAULT_JOINTS))
+                }]
             });
             selectEntity(id);
             playSfx('pop');
@@ -3565,8 +4317,26 @@
                     let pctX = (targetX / stageRect.width) * 100;
                     let pctY = (targetY / stageRect.height) * 100;
                     
-                    pctX = Math.max(0, Math.min(100, pctX));
-                    pctY = Math.max(0, Math.min(100, pctY));
+                    pctX = Math.max(-200, Math.min(200, pctX));
+                    pctY = Math.max(-200, Math.min(200, pctY));
+
+                    if (ent.parentId) {
+                        const parent = window.appState.entities.find(p => p.id === ent.parentId);
+                        if (parent) {
+                            const parentState = getResolvedEntityState(parent, window.appState.currentTime);
+                            const dx = pctX - parentState.x;
+                            const dy = pctY - parentState.y;
+                            
+                            const rad = -(parentState.rotation || 0) * Math.PI / 180;
+                            const cos = Math.cos(rad);
+                            const sin = Math.sin(rad);
+                            const rx = dx * cos - dy * sin;
+                            const ry = dx * sin + dy * cos;
+                            
+                            pctX = rx / (parentState.width / 100);
+                            pctY = ry / (parentState.height / 100);
+                        }
+                    }
                     
                     const el = document.getElementById(draggingEntity);
                     if (el) {
@@ -3637,9 +4407,31 @@
             // Set current tab scope
             grid.dataset.currentTab = category;
 
+            // Add poseable stickman rig at the start of characters library list
+            if (category === 'characters') {
+                const stickmanBtn = document.createElement('div');
+                stickmanBtn.className = 'asset-item contain border border-[#00ff41] p-2 flex flex-col justify-center items-center gap-1 bg-[#001100] cursor-pointer';
+                stickmanBtn.innerHTML = `
+                    <svg viewBox="-60 -60 120 120" style="width: 70%; height: 70%;">
+                        <line x1="0" y1="-20" x2="0" y2="20" stroke="#00ff41" stroke-width="6"/>
+                        <line x1="0" y1="-10" x2="-20" y2="5" stroke="#00ff41" stroke-width="6"/>
+                        <line x1="0" y1="-10" x2="20" y2="5" stroke="#00ff41" stroke-width="6"/>
+                        <line x1="0" y1="20" x2="-15" y2="45" stroke="#00ff41" stroke-width="6"/>
+                        <line x1="0" y1="20" x2="15" y2="45" stroke="#00ff41" stroke-width="6"/>
+                        <circle cx="0" cy="-35" r="12" fill="#000" stroke="#00ff41" stroke-width="4"/>
+                    </svg>
+                    <div class="text-[8px] uppercase font-bold text-[#00ff41] text-center">Stickman Rig</div>
+                `;
+                stickmanBtn.addEventListener('click', () => {
+                    closeModals();
+                    addStickmanEntity();
+                });
+                grid.appendChild(stickmanBtn);
+            }
+
             const assets = assetMap[category] || [];
             
-            if (assets.length === 0) {
+            if (assets.length === 0 && category !== 'characters') {
                 const emptyMsg = document.createElement('div');
                 emptyMsg.className = 'col-span-full py-8 text-center text-sm text-gray-400 font-semibold flex flex-col items-center gap-2';
                 emptyMsg.innerHTML = `
@@ -3926,6 +4718,133 @@
                 input.accept = "image/*";
             }
             input.click();
+        }
+
+        // RIGGING STUDIO ENGINE
+        function openRigEditor() {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (!ent || ent.type !== 'image') return;
+
+            closeModals();
+            
+            const modal = document.getElementById('rig-modal');
+            modal.classList.add('visible');
+
+            const workspaceImg = document.getElementById('rig-workspace-img');
+            workspaceImg.src = ent.content;
+
+            window.tempJoints = ent.bindJoints ? JSON.parse(JSON.stringify(Object.values(ent.bindJoints))) : [];
+            renderRigWorkspaceJoints();
+
+            const layer = document.getElementById('rig-joints-layer');
+            layer.onpointerdown = (e) => {
+                if (e.target.closest('.joint-handle') || e.target.classList.contains('cursor-pointer') || e.target.parentElement.classList.contains('cursor-pointer')) {
+                    return;
+                }
+                const rect = layer.getBoundingClientRect();
+                const px = (e.clientX - rect.left) / rect.width;
+                const py = (e.clientY - rect.top) / rect.height;
+                const lx = (px - 0.5) * 120;
+                const ly = (py - 0.5) * 120;
+                
+                const name = 'joint_' + Date.now() + '_' + Math.floor(Math.random() * 100);
+                window.tempJoints.push({ id: name, x: lx, y: ly });
+                renderRigWorkspaceJoints();
+            };
+        }
+
+        function renderRigWorkspaceJoints() {
+            const layer = document.getElementById('rig-joints-layer');
+            layer.innerHTML = '';
+            window.tempJoints.forEach((j, index) => {
+                const node = document.createElement('div');
+                node.className = 'absolute w-8 h-8 flex items-center justify-center cursor-pointer';
+                node.style.left = `${((j.x / 120) + 0.5) * 100}%`;
+                node.style.top = `${((j.y / 120) + 0.5) * 100}%`;
+                node.style.transform = 'translate(-50%, -50%)';
+                node.style.zIndex = '10';
+                
+                const dot = document.createElement('div');
+                dot.className = 'w-2.5 h-2.5 bg-black border border-[#00ff41]';
+                node.appendChild(dot);
+
+                const label = document.createElement('span');
+                label.className = 'absolute top-6 text-[8px] bg-black border border-[#003b00] px-1 text-[#00ff41] font-bold font-mono';
+                label.textContent = `P${index + 1}`;
+                node.appendChild(label);
+
+                let isDragging = false;
+                node.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    isDragging = true;
+                    node.setPointerCapture(e.pointerId);
+                });
+                node.addEventListener('pointermove', (e) => {
+                    if (!isDragging) return;
+                    const rect = layer.getBoundingClientRect();
+                    const px = (e.clientX - rect.left) / rect.width;
+                    const py = (e.clientY - rect.top) / rect.height;
+                    // Allow joints to be defined outside original bounds
+                    j.x = Math.max(-300, Math.min(300, (px - 0.5) * 120));
+                    j.y = Math.max(-300, Math.min(300, (py - 0.5) * 120));
+                    node.style.left = `${px * 100}%`;
+                    node.style.top = `${py * 100}%`;
+                });
+                node.addEventListener('pointerup', (e) => {
+                    if (isDragging) {
+                        node.releasePointerCapture(e.pointerId);
+                        isDragging = false;
+                        renderRigWorkspaceJoints();
+                    }
+                });
+                layer.appendChild(node);
+            });
+        }
+
+        function clearRigJoints() {
+            window.tempJoints = [];
+            renderRigWorkspaceJoints();
+        }
+
+        function saveImageRig() {
+            const id = window.appState.selectedEntityId;
+            if (!id) return;
+            const ent = window.appState.entities.find(e => e.id === id);
+            if (!ent) return;
+
+            if (window.tempJoints.length === 0) {
+                ent.isRigged = false;
+                ent.bindJoints = null;
+                ent.keyframes.forEach(kf => {
+                    delete kf.joints;
+                });
+                showToast("Rig removed from image.");
+            } else {
+                ent.isRigged = true;
+                const bindJointsObj = {};
+                window.tempJoints.forEach(j => {
+                    bindJointsObj[j.id] = { x: j.x, y: j.y };
+                });
+                ent.bindJoints = bindJointsObj;
+
+                ent.keyframes.forEach(kf => {
+                    if (!kf.joints) {
+                        kf.joints = JSON.parse(JSON.stringify(bindJointsObj));
+                    } else {
+                        const nextJoints = {};
+                        Object.keys(bindJointsObj).forEach(jId => {
+                            nextJoints[jId] = kf.joints[jId] || JSON.parse(JSON.stringify(bindJointsObj[jId]));
+                        });
+                        kf.joints = nextJoints;
+                    }
+                });
+                showToast("Image rigged successfully!");
+            }
+
+            closeModals();
+            renderStage();
         }
 
         // Process File Input upload
